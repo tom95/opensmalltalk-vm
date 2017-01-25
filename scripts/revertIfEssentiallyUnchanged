@@ -12,10 +12,10 @@ while [ -n "$1" -a  -d "$1" ]; do
 	shift
 done
 case `git status --porcelain -- "$1"` in
-*M*)	;;
+" M "*)	;;
 *)	exit 0
 esac
-RESULT="`git diff -- "$1" | grep '^[+-]' | egrep -v ' VMMaker[-.][a-z][a-z-]*\.[0-9][0-9]* uuid:| Cog[-.][a-z][a-z]*\.[0-9][0-9]* uuid:| Qwaq-Plugins[-.][a-z][a-z]*\.[0-9][0-9]* uuid:| VMMaker[-.][a-z][a-z-]*\.[0-9][0-9]* \([ie]\)| Cog[-.][a-z][a-z-]*\.[0-9][0-9]* \([ie]\)| Qwaq-Plugins[-.][a-z][a-z]*\.[0-9][0-9]* \([ie]\)| VMConstruction-Plugins-OSProcessPlugin[a-z.-][a-z.-]*\.[0-9][0-9]* | Sound[-.][a-z][a-z]*\.[0-9][0-9]* uuid:|^\-\-\-|^\+\+\+|^[+-]$'`"
+RESULT="`git diff -- "$1" | grep '^[+-]' | egrep -v ' VMMaker[-.][a-zA-Z][a-zA-Z-]*\.[0-9][0-9]* uuid:| Cog[-.][a-zA-Z][a-zA-Z-]*\.[0-9][0-9]* uuid:| Qwaq-Plugins[-.][a-z][a-z]*\.[0-9][0-9]* uuid:| VMMaker[-.][a-zA-Z][a-zA-Z-]*\.[0-9][0-9]* \([ie]\)| Cog[-.][a-zA-Z][a-zA-Z-]*\.[0-9][0-9]* \([ie]\)| Qwaq-Plugins[-.][a-z][a-z]*\.[0-9][0-9]* \([ie]\)| VMConstruction-Plugins-OSProcessPlugin[a-zA-Z][a-zA-Z-]*\.[0-9][0-9]* | Sound[-.][a-zA-Z][a-zA-Z-]*\.[0-9][0-9]* uuid:|^\-\-\-|^\+\+\+|^[+-]$'`"
 if [ -z "$TEST" ]; then
 	test -z "$RESULT" && (echo reverting "$1"; git checkout -- "$1")
 else
