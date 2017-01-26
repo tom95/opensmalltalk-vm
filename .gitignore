@@ -96,13 +96,15 @@ platforms/unix/config/autom4te.cache/
 /image/cogspurwin
 /image/CogSpur.app
 /image/Squeak-*-All-in-One.*
-/image/SqueakDebug.log
+/image/*Debug.log
 /image/__MACOSX
 /image/crash.dmp
 /image/package-cache
 /image/prefs
 /image/special-dirs
 /image/*.zip
+/image/.DS_Store
+
 
 # /platforms/Cross/
 
