@@ -30,7 +30,7 @@ if [ "$1" = -copysource ]; then
 elif [ -h $SOURCE ]; then
 	ln "`readlink $SOURCE`" $LIBDIR
 elif [ -f $SOURCE ]; then
-	ln $SOURCE $LIBDIR
+	ln $SOURCE $LIBDIR || (echo 'failed to hard link sources (cross-device link?); using symbolic link'; ln -s ../../../$SOURCE $LIBDIR)
 else
 	echo "can't find `basename $SOURCE`" 1>&2
 fi

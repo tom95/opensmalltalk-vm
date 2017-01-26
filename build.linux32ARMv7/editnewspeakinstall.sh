@@ -21,16 +21,16 @@ if [ -f bin/squeak ]; then
 	sed -i.bak 's/squeak/nsvm/g' bin/nsvm
 fi
 rm -rf man doc
-LIBDIR="`echo lib/squeak/[0-9.-]*`"
+LIBDIR="`echo lib/squeak/[0-9.-][0-9.-A-Za-z]*`"
 test -f $LIBDIR/squeak && mv $LIBDIR/squeak $LIBDIR/nsvm
 test -d lib/squeak && mv lib/squeak lib/nsvm
-LIBDIR="`echo lib/nsvm/[0-9.-]*`"
+LIBDIR="`echo lib/nsvm/[0-9.-][0-9.-A-Za-z]*`"
 if [ "$1" = -copysource ]; then
 	cp $SOURCE $LIBDIR
 elif [ -h $SOURCE ]; then
 	ln "`readlink $SOURCE`" $LIBDIR
 elif [ -f $SOURCE ]; then
-	ln $SOURCE $LIBDIR
+	ln $SOURCE $LIBDIR || (echo 'failed to hard link sources (cross-device link?); using symbolic link'; ln -s ../../../$SOURCE $LIBDIR)
 else
 	echo "can't find `basename $SOURCE`" 1>&2
 fi
