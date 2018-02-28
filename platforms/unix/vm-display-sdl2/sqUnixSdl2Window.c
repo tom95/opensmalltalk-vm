@@ -49,10 +49,10 @@ int sdl_button_to_sq(int button) {
 
 int sdl_modifiers_to_sq(SDL_Keymod mod) {
   return
-    (ShiftKeyBit & (mod & KMOD_SHIFT)) |
-    (CtrlKeyBit & (mod & KMOD_CTRL)) |
-    (CommandKeyBit & (mod & KMOD_GUI)) |
-    (OptionKeyBit & (mod & KMOD_ALT));
+    (mod & KMOD_SHIFT ? ShiftKeyBit : 0) |
+    (mod & KMOD_CTRL ? CtrlKeyBit : 0) |
+    (mod & KMOD_ALT ? CommandKeyBit : 0) |
+    (mod & KMOD_GUI ? OptionKeyBit : 0);
 }
 
 int current_modifiers() {
@@ -79,41 +79,136 @@ SDL_Surface *surface_from_sq_bits(sqInt bitsIndex, sqInt width, sqInt height, sq
   return SDL_CreateRGBSurfaceFrom(bits, width, height, depth, depth / 8 * width, rmask, gmask, bmask, amask);
 }
 
-// Copyright (c) 2008-2009 Bjoern Hoehrmann <bjoern@hoehrmann.de>
-// See http://bjoern.hoehrmann.de/utf-8/decoder/dfa/ for details.
-#define UTF8_ACCEPT 0
-#define UTF8_REJECT 1
-static const uint8_t utf8d[] = {
-  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, // 00..1f
-  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, // 20..3f
-  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, // 40..5f
-  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, // 60..7f
-  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9,9, // 80..9f
-  7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7, // a0..bf
-  8,8,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2, // c0..df
-  0xa,0x3,0x3,0x3,0x3,0x3,0x3,0x3,0x3,0x3,0x3,0x3,0x3,0x4,0x3,0x3, // e0..ef
-  0xb,0x6,0x6,0x6,0x5,0x8,0x8,0x8,0x8,0x8,0x8,0x8,0x8,0x8,0x8,0x8, // f0..ff
-  0x0,0x1,0x2,0x3,0x5,0x8,0x7,0x1,0x1,0x1,0x4,0x6,0x1,0x1,0x1,0x1, // s0..s0
-  1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,0,1,0,1,1,1,1,1,1, // s1..s2
-  1,2,1,1,1,1,1,2,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1, // s3..s4
-  1,2,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,3,1,3,1,1,1,1,1,1, // s5..s6
-  1,3,1,1,1,1,1,3,1,3,1,1,1,1,1,1,1,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1, // s7..s8
-};
-uint32_t utf8_decode(uint32_t* state, uint32_t* codep, uint32_t byte)
-{
-  uint32_t type = utf8d[byte];
-
-  *codep = (*state != UTF8_ACCEPT) ?
-    (byte & 0x3fu) | (*codep << 6) :
-    (0xff >> type) & (byte);
-
-  *state = utf8d[256 + *state*16 + type];
-  return *state;
+#if 1
+// TODO: found on the internet; replace this
+int get_length(unsigned char ch) {
+  int l;
+  unsigned char c = ch;
+  c >>= 3;
+  // 6 => 0x7e
+  // 5 => 0x3e
+  if (c == 0x1e) { l = 4; }
+  else {
+    c >>= 1;
+    if (c == 0xe) { l = 3; }
+    else {
+      c >>= 1;
+      if (c == 0x6) { l = 2; }
+      else { l = 1; }
+    }
+  }
+  return l;
 }
-// end copyright
+unsigned long *to_unicode(unsigned char *utf8, int len) {
+  unsigned char *p = utf8;
+  unsigned long ch;
+  int x = 0;
+  int l;
+  unsigned long *result = (unsigned long *)malloc(sizeof(unsigned long)*len);
+  unsigned long *r = result;
+  if (!result) { return NULL; }
+  while (*p) {
+    l = get_length(*p);
+    switch (l) {
+      case 4:
+	ch = (*p ^ 0xf0);
+	break;
+      case 3:
+	ch = (*p ^ 0xe0);
+	break;
+      case 2:
+	ch = (*p ^ 0xc0);
+	break;
+      case 1:
+	ch = *p;
+	break;
+      default:
+	printf("Len: %i\n", l);
+    }
+    ++p;
+    int y;
+    for (y = l; y > 1; y--) {
+      ch <<= 6;
+      ch |= (*p ^ 0x80);
+      ++p;
+    }
+    x += l;
+    *r = ch;
+    r++;
+  }
+  *r = 0x0;
+  return result;
+}
+#endif
+
+static int
+translateCode(SDL_Keycode sym, int *was_translated)
+{
+  *was_translated = 1;
+  switch (sym)
+    {
+    case SDLK_LEFT:	return 28;
+    case SDLK_UP:		return 30;
+    case SDLK_RIGHT:	return 29;
+    case SDLK_DOWN:	return 31;
+    case SDLK_INSERT:	return  5;
+    case SDLK_PRIOR:
+    case SDLK_PAGEUP:	return 11;
+    case SDLK_PAGEDOWN:	return 12;
+    case SDLK_HOME:	return  1;
+    case SDLK_END:	return  4;
+    case SDLK_RETURN:	return 13;
+    case SDLK_DELETE:	return 127;
+
+    /*TODO case XK_KP_Left:	return 28;
+    case XK_KP_Up:	return 30;
+    case XK_KP_Right:	return 29;
+    case XK_KP_Down:	return 31;
+    case XK_KP_Insert:	return  5;
+    case XK_KP_Prior:	return 11;
+    case XK_KP_Next:	return 12;
+    case XK_KP_Home:	return  1;
+    case XK_KP_End:	return  4;*/
+
+# if defined(XK_Control_L)
+	/* For XK_Shift_L, XK_Shift_R, XK_Caps_Lock & XK_Shift_Lock we can't just
+	 * use the SHIFT metastate since it would generate key codes. We use
+	 * META + SHIFT as these are all meta keys (meta == OptionKeyBit).
+	 */
+	case XK_Shift_L:
+		return withMetaSet(255,OptionKeyBit+ShiftKeyBit,ShiftKeyBit,modp,evt);
+	case XK_Shift_R:
+		return withMetaSet(254,OptionKeyBit+ShiftKeyBit,ShiftKeyBit,modp,evt);
+	case XK_Caps_Lock:
+		return withMetaSet(253,OptionKeyBit+ShiftKeyBit,ShiftKeyBit,modp,evt);
+	case XK_Shift_Lock:
+		return withMetaSet(252,OptionKeyBit+ShiftKeyBit,ShiftKeyBit,modp,evt);
+	case XK_Control_L:
+		return withMetaSet(251,OptionKeyBit+CtrlKeyBit,CtrlKeyBit,modp,evt);
+	case XK_Control_R:
+		return withMetaSet(250,OptionKeyBit+CtrlKeyBit,CtrlKeyBit,modp,evt);
+	case XK_Meta_L:
+		return withMetaSet(249,OptionKeyBit,0,modp,evt);
+	case XK_Meta_R:
+		return withMetaSet(248,OptionKeyBit,0,modp,evt);
+	case XK_Alt_L:
+		return withMetaSet(247,OptionKeyBit+CommandKeyBit,OptionKeyBit,modp,evt);
+	case XK_Alt_R:
+		return withMetaSet(246,OptionKeyBit+CommandKeyBit,OptionKeyBit,modp,evt);
+# endif
+
+    default:;
+    }
+  *was_translated = 0;
+  return sym;
+}
+
 
 static void handleEvent(SDL_Event *event)
 {
+  unsigned int sym;
+  int was_translated;
+  char name;
   switch (event->type) {
     case SDL_WINDOWEVENT:
       switch (event->window.event) {
@@ -127,32 +222,45 @@ static void handleEvent(SDL_Event *event)
       }
       break;
 
+#define IS_MOD(x) x == SDLK_LCTRL || x == SDLK_LSHIFT || x == SDLK_LALT || x == SDLK_LGUI
+
     case SDL_KEYDOWN:
-      printf("DOWN %d\n", event->key.keysym.sym);
-      recordKeyboardEvent(event->key.keysym.sym, EventKeyDown, current_modifiers(), 0);
-      // recordKeyboardEvent(event->key.keysym.sym, EventKeyChar, current_modifiers(), 0);
+      sym = translateCode(event->key.keysym.sym, &was_translated);
+
+      name = was_translated ? 0 : tolower(SDL_GetKeyName(sym)[0]);
+      if (IS_MOD(sym)) break;
+      printf("DOWN %d %c\n", sym, name);
+      recordKeyboardEvent(sym, EventKeyDown, current_modifiers(), name);
+      if (sym < 32 || sym > 2000 ||
+	  sym == SDLK_RETURN ||
+	  sym == SDLK_ESCAPE ||
+	  sym == SDLK_TAB ||
+	  sym == SDLK_BACKSPACE ||
+	  sym == SDLK_DELETE) {
+	printf("Report char\n");
+	recordKeyboardEvent(sym, EventKeyChar, current_modifiers(), 0);
+      }
       break;
 
     case SDL_KEYUP:
-      printf("UP %d\n", event->key.keysym.sym);
-      recordKeyboardEvent(event->key.keysym.sym, EventKeyUp, current_modifiers(), 0);
+      sym = translateCode(event->key.keysym.sym, &was_translated);
+      name = was_translated ? 0 : tolower(SDL_GetKeyName(sym)[0]);
+      if (IS_MOD(sym)) break;
+      printf("UP %d\n", sym);
+      recordKeyboardEvent(sym, EventKeyUp, current_modifiers(), name);
       break;
 
     case SDL_TEXTINPUT:
     {
-      char *c = event->text.text;
-      uint32_t state = 0, codepoint;
-      for (; *c; c++) {
-	if (!utf8_decode(&state, &codepoint, *c))
-	  recordKeyboardEvent(0, EventKeyChar, 0, codepoint);
-	if (state != UTF8_ACCEPT)
-	  break;
-      }
+      printf("Input: %s %u\n", event->text.text, current_modifiers());
+      unsigned long *res = to_unicode(event->text.text, 2);
+      recordKeyboardEvent(res[0], EventKeyChar, current_modifiers(), res[0]);
       break;
     }
 
     case SDL_MOUSEBUTTONDOWN:
     case SDL_MOUSEBUTTONUP:
+      modifierState = current_modifiers();
       mousePosition.x = event->button.x;
       mousePosition.y = event->button.y;
       if (event->type == SDL_MOUSEBUTTONDOWN)
@@ -162,11 +270,39 @@ static void handleEvent(SDL_Event *event)
       recordMouseEvent();
       break;
 
+    case SDL_MOUSEWHEEL:
+      recordMouseWheelEvent(event->wheel.x * 120, event->wheel.y * 120, current_modifiers());
+      break;
+
     case SDL_MOUSEMOTION:
+      modifierState = current_modifiers();
       mousePosition.x = event->motion.x;
       mousePosition.y = event->motion.y;
       recordMouseEvent();
       break;
+
+    case SDL_DROPFILE:
+      if (uxDropFileCount > 0) {
+	SDL_free(uxDropFileNames[0]);
+      }
+
+      uxDropFileCount = 1;
+      if (!uxDropFileNames)
+	uxDropFileNames = SDL_malloc(sizeof(char *));
+      uxDropFileNames[0] = event->drop.file;
+      recordDragEvent(SQDragDrop, 1);
+      break;
+    /* only from sdl 2.0.5 onwards
+    case SDL_DROPTEXT:
+      printf("Drop text\n");
+      SDL_Free(event->drop.file);
+      break;
+    case SDL_DROPBEGIN:
+      printf("Drop begin\n");
+      break;
+    case SDL_DROPCOMPLETE:
+      printf("Drop begin\n");
+      break;*/
   }
 }
 
@@ -277,14 +413,38 @@ static sqInt display_ioScreenSize(void)
   return (width << 16) | height;
 }
 
+static unsigned char swapBits(unsigned char in)
+{
+  unsigned char out= 0;
+  int i;
+  for (i= 0; i < 8; i++)
+    {
+      out= (out << 1) + (in & 1);
+      in >>= 1;
+    }
+  return out;
+}
+
 static sqInt display_ioSetCursorWithMask(sqInt cursorBitsIndex, sqInt cursorMaskIndex, sqInt offsetX, sqInt offsetY)
 {
-  trace();
-
   unsigned int *cursorBits = (unsigned char *) pointerForOop(cursorBitsIndex);
   unsigned int *cursorMask = (unsigned char *) pointerForOop(cursorMaskIndex);
 
-  SDL_Cursor *cursor = SDL_CreateCursor(cursorBits, cursorMask, 16, 16, -offsetX, -offsetY);
+  int i;
+  unsigned char data[32], mask[32];	/* cursors are always 16x16 */
+  for (i= 0; i < 16; i++)
+  {
+    data[i*2+0]= (cursorBits[i] >> 24) & 0xFF;
+    data[i*2+1]= (cursorBits[i] >> 16) & 0xFF;
+    mask[i*2+0]= (cursorMask[i] >> 24) & 0xFF;
+    mask[i*2+1]= (cursorMask[i] >> 16) & 0xFF;
+  }
+
+  static SDL_Cursor *cursor;
+  if (cursor)
+    SDL_FreeCursor(cursor);
+
+  cursor = SDL_CreateCursor(data, mask, 16, 16, -offsetX, -offsetY);
   if (!cursor)
     printf("Creating cursor failed: %s\n", SDL_GetError());
   SDL_SetCursor(cursor);
@@ -293,8 +453,17 @@ static sqInt display_ioSetCursorWithMask(sqInt cursorBitsIndex, sqInt cursorMask
 
 static sqInt display_ioSetCursorARGB(sqInt cursorBitsIndex, sqInt extentX, sqInt extentY, sqInt offsetX, sqInt offsetY)
 {
-  SDL_Surface *cursor_surface = surface_from_sq_bits(cursorBitsIndex, extentX, extentY, 32);
-  SDL_Cursor *cursor = SDL_CreateColorCursor(cursor_surface, -offsetX, -offsetY);
+  trace();
+  static SDL_Surface *cursor_surface;
+  static SDL_Cursor *cursor;
+
+  if (cursor)
+    SDL_FreeCursor(cursor);
+  if (cursor_surface)
+    SDL_FreeSurface(cursor_surface);
+
+  cursor_surface = surface_from_sq_bits(cursorBitsIndex, extentX, extentY, 32);
+  cursor = SDL_CreateColorCursor(cursor_surface, -offsetX, -offsetY);
   SDL_SetCursor(cursor);
   return 0;
 }
@@ -325,10 +494,14 @@ static sqInt display_ioShowDisplay(sqInt dispBitsIndex, sqInt width, sqInt heigh
   if (affectedT > height) affectedT= height;
   if (affectedB > height) affectedB= height;
 
-  SDL_Surface *image = surface_from_sq_bits(dispBitsIndex, width, height, depth);
-
   SDL_Surface *screen = SDL_GetWindowSurface(window);
+
+  SDL_Surface *image = surface_from_sq_bits(dispBitsIndex, width, height, depth);
+  // printf("b %i\n", screen->locked);
+
   SDL_BlitSurface(image, NULL, screen, NULL);
+  SDL_FreeSurface(image);
+
   SDL_UpdateWindowSurface(window);
 
   return 0;
@@ -367,27 +540,67 @@ static char *display_winSystemName(void)
   return "SDL2";
 }
 
+#define handle_sdl_error(msg)
+
 static void display_winInit(void)
 {
-  SDL_Init(SDL_INIT_VIDEO);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+
+  static const int kStencilBits = 8;  // Skia needs 8 stencil bits
+  SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
+  SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
+  SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
+  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+  SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 0);
+  SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, kStencilBits);
+
+  SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
+  if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) {
+    handle_sdl_error("Could not init sdl");
+  }
+}
+
+void get_window_size(int *width, int *height)
+{
+  int s = getSavedWindowSize();
+  if (s) {
+    *width = s >> 16;
+    *height = s & 0xffff;
+  } else {
+    *width = 640;
+    *height = 480;
+  }
 }
 
 static void display_winOpen(void)
 {
+  int width, height;
+  get_window_size(&width, &height);
+
   window = SDL_CreateWindow(
       "Squeak SDL2",
       SDL_WINDOWPOS_CENTERED,
       SDL_WINDOWPOS_CENTERED,
-      640,
-      480,
+      width,
+      height,
       SDL_WINDOW_OPENGL /*| SDL_WINDOW_ALLOW_HIGHDPI*/ | SDL_WINDOW_RESIZABLE);
 
   SDL_StartTextInput();
 
   if (!window) {
-    SDL_Log("Could not create window: %s", SDL_GetError());
-    SDL_Quit();
+    handle_sdl_error("Could not create window");
   }
+
+  /*SDL_GLContext gl_context = SDL_GL_CreateContext(window);
+  if (!gl_context) {
+    handle_sdl_error("Could not create gl contexts");
+  }
+  if (SDL_GL_MakeCurrent(window, gl_context)) {
+    handle_sdl_error("could not activate gl context")
+  }*/
 
   aioEnable(1, 0, AIO_EXT);
   aioHandle(1, xHandler, AIO_RX);
@@ -395,7 +608,6 @@ static void display_winOpen(void)
   (void) recordKeystroke;
   (void) recordDragEvent;
 }
-
 
 static void display_winExit(void)
 {
