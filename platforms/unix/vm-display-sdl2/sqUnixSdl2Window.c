@@ -481,11 +481,26 @@ static sqInt display_ioForceDisplayUpdate(void)
   return 0;
 }
 
+static void draw_test() {
+  glViewport(0, 0, 100, 100);
+  glEnable(GL_SCISSOR_TEST);
+  glScissor(0, 0, 100, 100);
+  glClearColor(1, 0, 0, 1);
+  glClear(GL_COLOR_BUFFER_BIT);
+  glBegin(GL_TRIANGLES);
+  glVertex2f(0, 0);
+  glVertex2f(1, 0);
+  glVertex2f(1, 1);
+  glEnd();
+  glFlush();
+  // SDL_GL_SwapWindow(window);
+}
+
 static sqInt display_ioShowDisplay(sqInt dispBitsIndex, sqInt width, sqInt height, sqInt depth,
 				   sqInt affectedL, sqInt affectedR, sqInt affectedT, sqInt affectedB)
 {
   // trace();
-  // printf("DRAW DEPTH %d (%dx%d) %d\n", depth, width, height, depth / 8 * width);
+  // printf("DRAW DEPTH %d (%dx%d) %d %i %i %i %i\n", depth, width, height, depth / 8 * width, affectedL, affectedR, affectedT, affectedB);
   if (width < 1 || height < 1)
     return 0;
 
@@ -494,15 +509,24 @@ static sqInt display_ioShowDisplay(sqInt dispBitsIndex, sqInt width, sqInt heigh
   if (affectedT > height) affectedT= height;
   if (affectedB > height) affectedB= height;
 
-  SDL_Surface *screen = SDL_GetWindowSurface(window);
+  SDL_Rect rect;
+  rect.x = affectedL;
+  rect.y = affectedT;
+  rect.w = affectedR - affectedL;
+  rect.h = affectedB - affectedT;
 
-  SDL_Surface *image = surface_from_sq_bits(dispBitsIndex, width, height, depth);
+  SDL_Surface *screen = SDL_GetWindowSurface(window);
   // printf("b %i\n", screen->locked);
 
-  SDL_BlitSurface(image, NULL, screen, NULL);
+  // TODO optimize: can we create a smaller surface?
+  SDL_Surface *image = surface_from_sq_bits(dispBitsIndex, width, height, depth);
+  SDL_BlitSurface(image, &rect, screen, &rect);
   SDL_FreeSurface(image);
 
   SDL_UpdateWindowSurface(window);
+
+  // SDL_GL_BindTexture();
+  // draw_test();
 
   return 0;
 }
@@ -553,9 +577,11 @@ static void display_winInit(void)
   SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
   SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
   SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
-  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+  // SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
   SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 0);
   SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, kStencilBits);
+
+  SDL_GL_SetSwapInterval(1);
 
   SDL_GL_SetAttribute(SDL_GL_ACCELERATED_VISUAL, 1);
   if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) {
@@ -594,13 +620,13 @@ static void display_winOpen(void)
     handle_sdl_error("Could not create window");
   }
 
-  /*SDL_GLContext gl_context = SDL_GL_CreateContext(window);
+  SDL_GLContext gl_context = SDL_GL_CreateContext(window);
   if (!gl_context) {
     handle_sdl_error("Could not create gl contexts");
   }
   if (SDL_GL_MakeCurrent(window, gl_context)) {
     handle_sdl_error("could not activate gl context")
-  }*/
+  }
 
   aioEnable(1, 0, AIO_EXT);
   aioHandle(1, xHandler, AIO_RX);

@@ -33,6 +33,7 @@
  *
  * NOTE: this file is included by the window support files that need it.
  */
+// #define DEBUG_KEYBOARD_EVENTS 1
 
 #if defined(DEBUG_EVENTS)
 # undef DEBUG_EVENTS
@@ -112,6 +113,10 @@ static sqInputEvent *allocateInputEvent(int eventType)
   return evt;
 }
 
+#define allocateMouseWheelEvent() ( \
+  (sqMouseEvent *)allocateInputEvent(EventTypeMouseWheel) \
+)
+
 #define allocateMouseEvent() ( \
   (sqMouseEvent *)allocateInputEvent(EventTypeMouse) \
 )
@@ -166,6 +171,13 @@ static void signalInputEvent(void)
     signalSemaphoreWithIndex(inputEventSemaIndex);
 }
 
+static void recordMouseWheelEvent(int dx, int dy, int modifiers) {
+  sqMouseEvent *evt = allocateMouseWheelEvent();
+  evt->x = dx;
+  evt->y = dy;
+  evt->buttons = modifiers;
+  signalInputEvent();
+}
 
 static void recordMouseEvent(void)
 {

@@ -91,6 +91,7 @@
 # undef	DEBUG_WINDOW
 # undef DEBUG_VISUAL
 #endif
+#define DEBUG_SELECTIONS
 
 #define	USE_XICFONT_OPTION
 #undef	USE_XICFONT_RESOURCE
