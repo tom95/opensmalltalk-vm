@@ -27,8 +27,10 @@
 
 #include "sqUnixEvent.c"		/* see X11 and/or Quartz drivers for examples */
 
-SDL_Window *window;
+#include "common.h"
 
+SDL_Window *window;
+ApplicationState state;
 
 #define trace() fprintf(stderr, "%s:%d %s\n", __FILE__, __LINE__, __FUNCTION__)
 
@@ -218,6 +220,10 @@ static void handleEvent(SDL_Event *event)
 	  break;
 	case SDL_WINDOWEVENT_CLOSE:
 	  recordWindowEvent(WindowEventClose, 0, 0, 0, 0, 1); /* windowIndex 1 is main window */
+	  break;
+	case SDL_WINDOWEVENT_RESIZED:
+	  destroy_context(&state);
+	  init_context(&state);
 	  break;
       }
       break;
@@ -482,18 +488,14 @@ static sqInt display_ioForceDisplayUpdate(void)
 }
 
 static void draw_test() {
-  glViewport(0, 0, 100, 100);
-  glEnable(GL_SCISSOR_TEST);
-  glScissor(0, 0, 100, 100);
-  glClearColor(1, 0, 0, 1);
-  glClear(GL_COLOR_BUFFER_BIT);
-  glBegin(GL_TRIANGLES);
-  glVertex2f(0, 0);
-  glVertex2f(1, 0);
-  glVertex2f(1, 1);
-  glEnd();
-  glFlush();
-  // SDL_GL_SwapWindow(window);
+  int dw, dh;
+  SDL_GL_GetDrawableSize(window, &dw, &dh);
+
+  glViewport(0, 0, dw, dh);
+  glClearColor(1, 1, 1, 1);
+  glClearStencil(0);
+  glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
 }
 
 static sqInt display_ioShowDisplay(sqInt dispBitsIndex, sqInt width, sqInt height, sqInt depth,
@@ -515,20 +517,33 @@ static sqInt display_ioShowDisplay(sqInt dispBitsIndex, sqInt width, sqInt heigh
   rect.w = affectedR - affectedL;
   rect.h = affectedB - affectedT;
 
-  SDL_Surface *screen = SDL_GetWindowSurface(window);
+  // SDL_Surface *screen = SDL_GetWindowSurface(window);
   // printf("b %i\n", screen->locked);
 
   // TODO optimize: can we create a smaller surface?
-  SDL_Surface *image = surface_from_sq_bits(dispBitsIndex, width, height, depth);
-  SDL_BlitSurface(image, &rect, screen, &rect);
-  SDL_FreeSurface(image);
+  // SDL_Surface *image = surface_from_sq_bits(dispBitsIndex, width, height, depth);
+  // SDL_BlitSurface(image, &rect, screen, &rect);
+  // SDL_UpdateWindowSurface(window);
 
-  SDL_UpdateWindowSurface(window);
+  // SDL_Texture *t = SDL_CreateTextureFromSurface(renderer, image);
+  // SDL_FreeSurface(image);
 
-  // SDL_GL_BindTexture();
-  // draw_test();
+  blit(&state, pointerForOop(dispBitsIndex), width, height, depth,
+      affectedL, affectedR, affectedT, affectedB);
+
+  draw_text(&state, 200, 200);
+
+  SDL_GL_SwapWindow(window);
 
   return 0;
+}
+
+sqInt primitiveCopyBits()
+{
+  printf("hi\n");
+  sqInt receiver = stackValue(methodArgumentCount());
+  sqInt dest = fetchPointerofObject(0, receiver);
+  sqInt src = fetchPointerofObject(1, receiver);
 }
 
 static sqInt display_ioHasDisplayDepth(sqInt i)
@@ -577,7 +592,7 @@ static void display_winInit(void)
   SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
   SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
   SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
-  // SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
   SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 0);
   SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, kStencilBits);
 
@@ -627,6 +642,9 @@ static void display_winOpen(void)
   if (SDL_GL_MakeCurrent(window, gl_context)) {
     handle_sdl_error("could not activate gl context")
   }
+
+  state.window = window;
+  init_context(&state);
 
   aioEnable(1, 0, AIO_EXT);
   aioHandle(1, xHandler, AIO_RX);
