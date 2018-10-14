@@ -24,21 +24,30 @@ void destroy_context(ApplicationState *state) {
     state->context->abandonContext();
 }
 
+void draw_window(ApplicationState *state) {
+    SkPaint paint;
+    paint.setFilterQuality(kNone_SkFilterQuality);
+    paint.setAntiAlias(false);
+
+    state->canvas->drawBitmap(*state->window_bitmap, 0, 0, &paint);
+    state->canvas->flush();
+}
+
 void blit(ApplicationState *state, char *bits, int width, int height, int depth,
         int l, int r, int t, int b) {
-    SkImageInfo info = SkImageInfo::MakeN32(width, height, kPremul_SkAlphaType);
+    static SkImageInfo info = SkImageInfo::Make(width, height, kBGRA_8888_SkColorType, kUnpremul_SkAlphaType);
     // sk_sp<SkData> data = SkData::MakeWithoutCopy(bits, width * height * depth / 8);
     // sk_sp<SkImage> image = SkImage::MakeRasterData(info, data, width * depth / 8);
     // state->canvas->drawImage(image, 0, 0);
 
-    SkPaint paint;
-    paint.setFilterQuality(kNone_SkFilterQuality);
+    SkPixmap pixmap(info, bits, width * depth);
 
-    SkBitmap bitmap;
-    bitmap.installPixels(info, bits, width * depth / 8, nullptr, nullptr);
-    state->canvas->drawBitmap(bitmap, 0, 0, &paint);
+    // printf("\n\n\n%i %i %i %i\n\n\n\n", l, r, t, b);
+    state->window_bitmap->installPixels(info, bits, width * depth / 8, nullptr, nullptr);
+
     // SkRect rect = SkRect::MakeLTRB(l, t, r, b);
-    // state->canvas->drawBitmapRect(bitmap, rect, rect, nullptr);
+    // state->canvas->drawBitmapRect(*state->window_bitmap, rect, rect, nullptr);
+    draw_window(state);
 }
 
 void init_context(ApplicationState *state) {
@@ -90,12 +99,7 @@ void init_context(ApplicationState *state) {
     // SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, kMsaaSampleCount);
     GrBackendRenderTarget target(width, height, kMsaaSampleCount, kStencilBits, info);
 
-    // setup SkSurface
-    // To use distance field text, use commented out SkSurfaceProps instead
-    // SkSurfaceProps props(SkSurfaceProps::kUseDeviceIndependentFonts_Flag,
-    //                      SkSurfaceProps::kLegacyFontHost_InitType);
     SkSurfaceProps props(SkSurfaceProps::kLegacyFontHost_InitType);
-
     sk_sp<SkSurface> surface(SkSurface::MakeFromBackendRenderTarget(context.get(), target,
                                                                     kBottomLeft_GrSurfaceOrigin,
                                                                     colorType, nullptr, &props));
@@ -104,13 +108,7 @@ void init_context(ApplicationState *state) {
     state->surface = &*surface;
 
     state->canvas = surface->getCanvas();
-}
-
-void begin_draw(ApplicationState *state) {
-    // state->canvas->clear(SK_ColorWHITE);
-}
-void end_draw(ApplicationState *state) {
-    state->canvas->flush();
+    state->window_bitmap = new SkBitmap();
 }
 
 void draw_text(ApplicationState *state, int x, int y) {

@@ -483,7 +483,10 @@ static sqInt display_ioForceDisplayUpdate(void)
 {
   // trace();
   // SDL_UpdateWindowSurface(window);
-  // fullDisplayUpdate();
+
+  /*glClear(GL_COLOR_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+  draw_window(&state);
+  SDL_GL_SwapWindow(window);*/
   return 0;
 }
 
@@ -531,9 +534,8 @@ static sqInt display_ioShowDisplay(sqInt dispBitsIndex, sqInt width, sqInt heigh
   blit(&state, pointerForOop(dispBitsIndex), width, height, depth,
       affectedL, affectedR, affectedT, affectedB);
 
-  draw_text(&state, 200, 200);
-
-  SDL_GL_SwapWindow(window);
+  // draw_text(&state, 200, 200);
+  SDL_GL_SwapWindow(state->window);
 
   return 0;
 }

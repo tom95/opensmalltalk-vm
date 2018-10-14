@@ -139,7 +139,6 @@ int glCreateRendererFlags(int x, int y, int w, int h, int flags)
 	renderer->used		= 1;
 	renderer->bufferRect[0] = x;
 	renderer->bufferRect[1] = y;
-	renderer->bufferRect[2] = w;
 	renderer->bufferRect[3] = h;
 	if (!glMakeCurrentRenderer(renderer))
 	  {
