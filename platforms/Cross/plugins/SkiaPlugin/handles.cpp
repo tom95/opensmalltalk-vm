@@ -1,4 +1,4 @@
-#include "sq.h"
+#include "handles.h"
 
 #define DEBUG_ALLOCATIONS 0
 
@@ -43,7 +43,7 @@ sqInt toHandle(void *pointer) {
 	}
 
 	const int grow = 64;
-	pointer_handles = realloc(pointer_handles, sizeof(void *) * (max_handles + grow));
+	pointer_handles = (void **) realloc((void *) pointer_handles, sizeof(void *) * (max_handles + grow));
 	if (!pointer_handles) {
 #if DEBUG_ALLOCATIONS
 		printf("REALLLOC failed\n");
@@ -67,3 +67,4 @@ sqInt toHandle(void *pointer) {
 
 	return handle;
 }
+
