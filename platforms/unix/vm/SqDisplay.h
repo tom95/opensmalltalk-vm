@@ -95,6 +95,7 @@ struct SqDisplay
   long    (*ioSizeOfNativeDisplay)(void *);
   long    (*ioPositionOfNativeWindow)(void *);
   long    (*ioSizeOfNativeWindow)(void *);
+  void   *(*ioSkiaContext)(void);
 };
 
 
@@ -168,7 +169,8 @@ static struct SqDisplay display_##NAME##_itf= {	\
   display_ioPositionOfNativeDisplay,	\
   display_ioSizeOfNativeDisplay,	\
   display_ioPositionOfNativeWindow,	\
-  display_ioSizeOfNativeWindow	\
+  display_ioSizeOfNativeWindow,	\
+  display_ioSkiaContext \
 }
 
 

@@ -486,6 +486,10 @@ long display_ioPositionOfNativeWindow(void *windowHandle) { return -1; }
 long display_ioSizeOfNativeWindow(void *windowHandle) { return -1; }
 
 
+static void *display_ioSkiaContext(void) {
+  return NULL;
+}
+
 
 //----------------------------------------------------------------
 

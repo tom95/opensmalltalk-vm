@@ -210,6 +210,7 @@ static void recordKeyboardEvent(int keyCode, int pressCode, int modifiers, int u
   evt->reserved1=
     evt->windowIndex= 0;
   signalInputEvent();
+  printf("EVENT %i %i %i %i\n", keyCode, pressCode, modifiers, ucs4);
 #if DEBUG_KEYBOARD_EVENTS
   printf("EVENT (recordKeyboardEvent): time: %d key", evt->timeStamp);
   switch (pressCode)

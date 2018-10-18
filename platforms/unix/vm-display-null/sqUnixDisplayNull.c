@@ -176,6 +176,8 @@ long display_ioPositionOfNativeWindow(void *windowHandle) { return -1; }
 
 long display_ioSizeOfNativeWindow(void *windowHandle) { return -1; }
 
+void *display_ioSkiaContext(void) { return NULL; }
+
 #endif /* (SqDisplayVersionMajor >= 1 && SqDisplayVersionMinor >= 3) */
 
 SqDisplayDefine(null);

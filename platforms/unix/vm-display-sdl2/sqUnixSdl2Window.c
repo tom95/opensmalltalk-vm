@@ -233,9 +233,15 @@ static void handleEvent(SDL_Event *event)
     case SDL_KEYDOWN:
       sym = translateCode(event->key.keysym.sym, &was_translated);
 
+
+      if(event->key.keysym.scancode != SDL_GetScancodeFromKey(event->key.keysym.sym))
+	printf("Physical %s key acting as %s key",
+	    SDL_GetScancodeName(event->key.keysym.scancode),
+	    SDL_GetKeyName(event->key.keysym.sym));
+
       name = was_translated ? 0 : tolower(SDL_GetKeyName(sym)[0]);
-      if (IS_MOD(sym)) break;
       printf("DOWN %d %c\n", sym, name);
+      if (IS_MOD(sym)) break;
       recordKeyboardEvent(sym, EventKeyDown, current_modifiers(), name);
       if (sym < 32 || sym > 2000 ||
 	  sym == SDLK_RETURN ||
@@ -251,8 +257,8 @@ static void handleEvent(SDL_Event *event)
     case SDL_KEYUP:
       sym = translateCode(event->key.keysym.sym, &was_translated);
       name = was_translated ? 0 : tolower(SDL_GetKeyName(sym)[0]);
-      if (IS_MOD(sym)) break;
       printf("UP %d\n", sym);
+      if (IS_MOD(sym)) break;
       recordKeyboardEvent(sym, EventKeyUp, current_modifiers(), name);
       break;
 
@@ -514,11 +520,11 @@ static sqInt display_ioShowDisplay(sqInt dispBitsIndex, sqInt width, sqInt heigh
   if (affectedT > height) affectedT= height;
   if (affectedB > height) affectedB= height;
 
-  SDL_Rect rect;
-  rect.x = affectedL;
-  rect.y = affectedT;
-  rect.w = affectedR - affectedL;
-  rect.h = affectedB - affectedT;
+  // SDL_Rect rect;
+  // rect.x = affectedL;
+  // rect.y = affectedT;
+  // rect.w = affectedR - affectedL;
+  // rect.h = affectedB - affectedT;
 
   // SDL_Surface *screen = SDL_GetWindowSurface(window);
   // printf("b %i\n", screen->locked);
@@ -535,17 +541,13 @@ static sqInt display_ioShowDisplay(sqInt dispBitsIndex, sqInt width, sqInt heigh
       affectedL, affectedR, affectedT, affectedB);
 
   // draw_text(&state, 200, 200);
-  SDL_GL_SwapWindow(state->window);
+  SDL_GL_SwapWindow(state.window);
 
   return 0;
 }
 
-sqInt primitiveCopyBits()
-{
-  printf("hi\n");
-  sqInt receiver = stackValue(methodArgumentCount());
-  sqInt dest = fetchPointerofObject(0, receiver);
-  sqInt src = fetchPointerofObject(1, receiver);
+static void *display_ioSkiaContext() {
+  return NULL;
 }
 
 static sqInt display_ioHasDisplayDepth(sqInt i)
@@ -618,7 +620,7 @@ void get_window_size(int *width, int *height)
   }
 }
 
-static void display_winOpen(void)
+static void display_winOpen(int argc, char *dropFiles[])
 {
   int width, height;
   get_window_size(&width, &height);
@@ -663,7 +665,7 @@ static void display_winExit(void)
   SDL_Quit();
 }
 
-static long  display_winImageFind(char *buf, long len)		{ trace();  return 0; }
+static long  display_winImageFind(char *buf, int len)		{ trace();  return 0; }
 static void display_winImageNotFound(void)			{ trace(); }
 
 /*

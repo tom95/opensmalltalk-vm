@@ -7175,6 +7175,10 @@ static long display_hostWindowGetSize(long windowIndex)
     : -1;
 }
 
+static void *display_ioSkiaContext(void) {
+  return NULL;
+}
+
 /* ioSizeOfWindowSetxy: args are int windowIndex, int w & h for the
  * width / height to make the window. Return the actual size the OS
  * produced in (width<<16 | height) format or -1 for failure as above. */
