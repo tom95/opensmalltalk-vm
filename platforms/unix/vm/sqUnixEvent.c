@@ -51,7 +51,7 @@
 # endif
 #endif
 
-#define DEBUG_KEYBOARD_EVENTS 1
+// #define DEBUG_KEYBOARD_EVENTS 1
 #define IEB_SIZE	 64	/* must be power of 2 */
 
 typedef struct
