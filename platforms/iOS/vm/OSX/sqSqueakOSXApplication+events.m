@@ -67,18 +67,37 @@ static int buttonState=0;
 
 @implementation sqSqueakOSXApplication (events)
 
+// Consume all pending events in the NSApp
+// Events may come from the window open by the VM or windows open by other windowing systems
+// We need to consume all events in the queue, otherwise this may produce lockups when e.g., switching resolutions
+// If the event does not correspond to this window, we take it from the event queue anyways and re-post it afterwards
+// This gives other windows the opportunity to consume their events
 - (void) pumpRunLoopEventSendAndSignal:(BOOL)signal {
-    NSEvent *event;
-    
-    while ((event = [NSApp nextEventMatchingMask:NSEventMaskAny
-                                       untilDate:nil
-                                          inMode:NSEventTrackingRunLoopMode
-                                         dequeue:YES])) {
-        [NSApp sendEvent: event];
-        if (signal) {
-            interpreterProxy->signalSemaphoreWithIndex(gDelegateApp.squeakApplication.inputSemaphoreIndex);
-        }
-    }
+       NSEvent *event;
+       NSMutableArray *alienEventQueue = [[NSMutableArray alloc] init];
+       while (event = [NSApp nextEventMatchingMask:NSEventMaskAny
+                             untilDate:nil
+                             inMode:NSEventTrackingRunLoopMode
+                             dequeue:YES]) {
+         // If the event is not a system event or an event of *this* window, queue the event
+         // Otherwise treat the event normally and send it to the app
+         if (event.window && event.window != gDelegateApp.window){
+           [alienEventQueue addObject: event];
+         }else{
+           [NSApp sendEvent: event];
+           if (signal) {
+               interpreterProxy->signalSemaphoreWithIndex(gDelegateApp.squeakApplication.inputSemaphoreIndex);
+           }
+         }
+     }
+
+     // Put back in the queue all events that did not belong to this window
+     // They will be managed by other windowing systems
+     // (or by a subsequent invocation to this function)
+     while (event = [alienEventQueue firstObject]){
+       [NSApp postEvent: event atStart: NO];
+       [alienEventQueue removeObject: event];
+     }
 }
 
 - (void) pumpRunLoop {	

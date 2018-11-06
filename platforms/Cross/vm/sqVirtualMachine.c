@@ -198,6 +198,7 @@ char *cStringOrNullFor(sqInt);
 sqInt statNumGCs(void);
 sqInt stringForCString(char *);
 sqInt primitiveFailForOSError(sqLong);
+sqInt primitiveFailForFFIExceptionat(usqLong exceptionCode, usqInt pc);
 #endif
 
 void *ioLoadFunctionFrom(char *fnName, char *modName);
@@ -217,10 +218,18 @@ sqInt addGCRoot(sqInt *varLoc);
 sqInt removeGCRoot(sqInt *varLoc);
 
 /* Proxy declarations for v1.10 */
+# if VM_PROXY_MINOR > 13 /* OS Errors available in primitives; easy return forms */
+sqInt  methodReturnBool(sqInt);
+sqInt  methodReturnFloat(double);
+sqInt  methodReturnInteger(sqInt);
+sqInt  methodReturnReceiver(void);
+sqInt  methodReturnString(char *);
+# else
 sqInt methodArg(sqInt index);
 sqInt objectArg(sqInt index);
 sqInt integerArg(sqInt index);
 double floatArg(sqInt index);
+#endif
 sqInt methodReturnValue(sqInt oop);
 sqInt topRemappableOop(void);
 
@@ -464,10 +473,18 @@ struct VirtualMachine* sqGetInterpreterProxy(void)
 #endif
 
 #if VM_PROXY_MINOR > 9
+# if VM_PROXY_MINOR > 13 /* OS Errors available in primitives; easy return forms */
+	VM->methodReturnBool = methodReturnBool;
+	VM->methodReturnFloat = methodReturnFloat;
+	VM->methodReturnInteger = methodReturnInteger;
+	VM->methodReturnReceiver = methodReturnReceiver;
+	VM->methodReturnString = methodReturnString;
+# else
 	VM->methodArg = methodArg;
 	VM->objectArg = objectArg;
 	VM->integerArg = integerArg;
 	VM->floatArg = floatArg;
+# endif
 	VM->methodReturnValue = methodReturnValue;
 	VM->topRemappableOop = topRemappableOop;
 #endif
@@ -515,6 +532,7 @@ struct VirtualMachine* sqGetInterpreterProxy(void)
 	VM->statNumGCs = statNumGCs;
 	VM->stringForCString = stringForCString;
 	VM->primitiveFailForOSError = primitiveFailForOSError;
+	VM->primitiveFailForFFIExceptionat = primitiveFailForFFIExceptionat;
 #endif
 
 	return VM;
