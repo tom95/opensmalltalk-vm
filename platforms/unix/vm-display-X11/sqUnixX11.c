@@ -2032,16 +2032,6 @@ static int x2sqKeyPlain(XKeyEvent *xevt, KeySym *symbolic)
   unsigned char buf[32];
   int nConv= XLookupString(xevt, (char *)buf, sizeof(buf), symbolic, 0);
   int charCode= buf[0];
-#if DEBUG_KEYBOARD_EVENTS
-  int i;
-  fprintf(stderr, "convert keycode");
-  for (i = 0; i < nConv; i++) {
-	if (!i) fprintf(stderr, " [");
-	fprintf(stderr, "%d(%02x)%c", buf[i], buf[i], i + 1 < nConv ? ',' : ']');
-  }
-  fprintf(stderr, " %d(%02x) -> %d(%02x) (keysym %p %s)\n",
-	 xevt->keycode, xevt->keycode, charCode, charCode, symbolic, nameForKeycode(*symbolic));
-#endif
   if (!nConv && (charCode= translateCode(*symbolic, &modifierState, xevt)) < 0)
       return -1;	/* unknown key */
   if ((charCode == 127) && mapDelBs)
@@ -3720,77 +3710,7 @@ static void handleEvent(XEvent *evt)
 	int ucs4= xkeysym2ucs4(symbolic);
 	DCONV_FPRINTF(stderr, "symbolic, keyCode, ucs4: %x, %d, %d\n", symbolic, keyCode, ucs4);
 	DCONV_FPRINTF(stderr, "pressed, buffer: %d, %x\n", multi_key_pressed, multi_key_buffer);
-	if (multi_key_pressed && multi_key_buffer == 0)
-	  {
-	    switch (ucs4)
-	      {
-#              define key_case(sym, code)		\
-	        case sym:				\
-	          multi_key_buffer= (code);		\
-		  keyCode= -1;				\
-	          ucs4= -1;				\
-	          break;
-		key_case(0x60, 0x0300); /* grave */
-		key_case(0x27, 0x0301); /* apostrophe */
-		key_case(0x5e, 0x0302); /* circumflex */
-		key_case(0x7e, 0x0303); /* tilde */
-		key_case(0x22, 0x0308); /* double quote */
-		key_case(0x61, 0x030a); /* a */
-#              undef key_case
-	      }
-	  }
-	else
-	  {
-	  switch (symbolic)
-	    {
-#            define dead_key_case(sym, code, orig)	\
-	      case sym:					\
-	        if (multi_key_buffer == code)		\
-		  {					\
-		    multi_key_buffer= 0;		\
-		    keyCode= orig;			\
-		    ucs4= orig;				\
-		  }					\
-		else					\
-		  {					\
-		    multi_key_buffer= (code);		\
-		    keyCode= -1;			\
-		    ucs4= -1;				\
-		  }					\
-	        break;
-	      dead_key_case(XK_dead_grave, 0x0300, 0x60);
-	      dead_key_case(XK_dead_acute, 0x0301, 0x27);
-	      dead_key_case(XK_dead_circumflex, 0x0302, 0x5e);
-	      dead_key_case(XK_dead_tilde, 0x0303, 0x7e);
-	      dead_key_case(XK_dead_macron, 0x0304, 0x0304);
-	      dead_key_case(XK_dead_abovedot, 0x0307, 0x0307);
-	      dead_key_case(XK_dead_diaeresis, 0x0308, 0x0308);
-	      dead_key_case(XK_dead_abovering, 0x030A, 0x030A);
-	      dead_key_case(XK_dead_doubleacute, 0x030B, 0x030B);
-	      dead_key_case(XK_dead_caron, 0x030C, 0x030C);
-	      dead_key_case(XK_dead_cedilla, 0x0327, 0x0327);
-	      dead_key_case(XK_dead_ogonek, 0x0328, 0x0328);
-	      dead_key_case(XK_dead_iota, 0x0345, 0x0345);
-	      dead_key_case(XK_dead_voiced_sound, 0x3099, 0x3099);
-	      dead_key_case(XK_dead_semivoiced_sound, 0x309a, 0x309a);
-	      dead_key_case(XK_dead_belowdot, 0x0323, 0x0323);
-	      dead_key_case(XK_dead_hook, 0x0309, 0x0309);
-	      dead_key_case(XK_dead_horn, 0x031b, 0x031b);
-#            undef dead_key_case
-	    }
-	  if (symbolic != XK_Multi_key)
-	    {
-	      multi_key_pressed= 0; 
-	      DCONV_FPRINTF(stderr, "multi_key reset\n");
-	    }
-	  }
 	DCONV_FPRINTF(stderr, "keyCode, ucs4, multi_key_buffer: %d, %d, %x\n", keyCode, ucs4, multi_key_buffer);
-	if (keyCode >= 0)
-	  {
-	    recordKeystroke(keyCode);			/* DEPRECATED */
-	    if (multi_key_buffer != 0)
-	      recordKeystroke(multi_key_buffer);
-	  }
 	if ((keyCode >= 0) || (ucs4 > 0))
 	  {
 	    recordKeyboardEvent(keyCode, EventKeyDown, modifierState, ucs4);
