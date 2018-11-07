@@ -807,6 +807,7 @@ with_gl
 enable_fast_bitblt
 with_custom_display
 with_vm_display_fbdev
+with_sdl2
 with_vm_sound_OSS
 with_custom_sound
 enable_iconv
@@ -1501,6 +1502,7 @@ Optional Packages:
   --with-x                use the X Window System
   --with-custom-display   enable custom window support default=disabled
   --without-vm-display-fbdev      disable frame buffer vm display support default=enabled
+  --with-sdl2   enable sdl2 window support default=disabled
   --without-vm-sound-OSS  disable OSS vm sound support (default=enabled)
   --with-custom-sound     enable custom sound support default=disabled
   --with-libtls           Use libtls instead of OpenSSL unconditionally
@@ -16722,6 +16724,119 @@ fi
 done
 
 fi
+if test "${plibs}"; then
+  llibs="${LIBS}"
+  for l in ${plibs}; do
+  llibs="${llibs} -l${l}"
+  done
+  echo ${llibs} > ${plugin}.lib
+fi
+plugin="vm-display-sdl2"
+plibs=""
+rm -f vm-display-sdl2.sub vm-display-sdl2.lib
+# -*- sh -*-
+
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for sdl2 display support" >&5
+$as_echo_n "checking for sdl2 display support... " >&6; }
+
+
+# Check whether --with-sdl2 was given.
+if test "${with_sdl2+set}" = set; then :
+  withval=$with_sdl2; have_dpy_sdl2="$withval"
+else
+  have_dpy_sdl2="no"
+fi
+
+
+if test "$have_dpy_sdl2" = "yes"; then
+  # check for libraries, headers, etc., here...
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for SDL_Init in -lSDL2" >&5
+$as_echo_n "checking for SDL_Init in -lSDL2... " >&6; }
+if ${ac_cv_lib_SDL2_SDL_Init+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_check_lib_save_LIBS=$LIBS
+LIBS="-lSDL2  $LIBS"
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char SDL_Init ();
+int
+main ()
+{
+return SDL_Init ();
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_lib_SDL2_SDL_Init=yes
+else
+  ac_cv_lib_SDL2_SDL_Init=no
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext conftest.$ac_ext
+LIBS=$ac_check_lib_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_SDL2_SDL_Init" >&5
+$as_echo "$ac_cv_lib_SDL2_SDL_Init" >&6; }
+if test "x$ac_cv_lib_SDL2_SDL_Init" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_LIBSDL2 1
+_ACEOF
+
+  LIBS="-lSDL2 $LIBS"
+
+fi
+
+
+  cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+#include <SDL2/SDL.h>
+int
+main ()
+{
+(void)SDL_Init;
+  ;
+  return 0;
+}
+_ACEOF
+if ac_fn_c_try_compile "$LINENO"; then :
+
+      { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+
+else
+
+    { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+
+
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: ******** disabling ${plugin}" >&5
+$as_echo "******** disabling ${plugin}" >&6; }
+  disabled_plugins="${disabled_plugins} ${plugin}"
+
+fi
+rm -f core conftest.err conftest.$ac_objext conftest.$ac_ext
+
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+
+
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: ******** disabling ${plugin}" >&5
+$as_echo "******** disabling ${plugin}" >&6; }
+  disabled_plugins="${disabled_plugins} ${plugin}"
+fi
+
 if test "${plibs}"; then
   llibs="${LIBS}"
   for l in ${plibs}; do
