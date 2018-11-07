@@ -488,7 +488,7 @@ static sqInt display_ioShowDisplay(sqInt dispBitsIndex, sqInt width, sqInt heigh
 }
 
 static void *display_ioSkiaContext() {
-  return state.context;
+  return state.canvas;
 }
 
 static sqInt display_ioHasDisplayDepth(sqInt i)
