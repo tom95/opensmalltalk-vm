@@ -6925,7 +6925,7 @@ static void display_ioGLsetBufferRect(glRenderer *r, sqInt x, sqInt y, sqInt w, 
  * B3DAcceleratorPlugin.
  */
 #undef DPRINTF3D
-#define DPRINTF3D(v,a) do { if ((v) <= verboseLevel) myPrint3Dlog a; } while (0)
+#define DPRINTF3D(v,a) do { if (true) myPrint3Dlog a; } while (0)
 
 static FILE *logfile = 0;
 static void
@@ -6997,8 +6997,13 @@ static sqInt display_ioGLinitialise(void) { return 1; }
 #define _renderContext(R)	((R)->context)
 #define renderContext(R)	((GLXContext)(R)->context)
 
+typedef GLXContext (*glXCreateContextAttribsARBProc)
+    (Display*, GLXFBConfig, GLXContext, Bool, const int*);
+
 static sqInt display_ioGLcreateRenderer(glRenderer *r, sqInt x, sqInt y, sqInt w, sqInt h, sqInt flags)
 {
+#if 0
+  printf("hi\n");
   XVisualInfo* visinfo= 0;
 
   if (flags & B3D_STENCIL_BUFFER)
@@ -7008,41 +7013,80 @@ static sqInt display_ioGLcreateRenderer(glRenderer *r, sqInt x, sqInt y, sqInt w
   _renderWindow(r)= 0;
   _renderContext(r)= 0;
 
-  DPRINTF3D(3, ("---- Creating new renderer ----\r\r"));
+  printf("---- Creating new renderer ----\n\n");
 
   /* sanity checks */
   if (w < 0 || h < 0)
     {
-      DPRINTF3D(1, ("Negative extent (%i@%i)!\r", w, h));
+      printf("Negative extent (%i@%i)!\n", w, h);
       goto fail;
     }
   /* choose visual and create context */
-  if (verboseLevel >= 3)
+  if (false)
     listVisuals();
   {
-    visinfo= glXChooseVisual(stDisplay, DefaultScreen(stDisplay), visualAttributes);
-    if (!visinfo)
-      {
+    int num_fbc = 0;
+    static int visualAttribs[] = {
+        GLX_RENDER_TYPE, GLX_RGBA_BIT,
+        GLX_DRAWABLE_TYPE, GLX_WINDOW_BIT,
+        GLX_DOUBLEBUFFER, true,
+        GLX_RED_SIZE, 1,
+        GLX_GREEN_SIZE, 1,
+        GLX_BLUE_SIZE, 1,
+        None
+    };
+
+    GLXFBConfig *fbc = glXChooseFBConfig(stDisplay,
+                                         DefaultScreen(stDisplay),
+                                         visualAttributes, &num_fbc);
+    printf("GOT %i VISUALS\n", num_fbc);
+    visinfo = glXGetVisualFromFBConfig(stDisplay, fbc[0]);
+    printf("VISINFO: %p\n", visinfo);
+    // visinfo= glXChooseVisual(stDisplay, DefaultScreen(stDisplay), visualAttributes);
+    if (!visinfo) {
 	/* retry without alpha */
 	visualAttributes[3]= 0;
 	visinfo= glXChooseVisual(stDisplay, DefaultScreen(stDisplay), visualAttributes);
-      }
-    if (!visinfo)
-      {
-	DPRINTF3D(1, ("No OpenGL visual found!\r"));
+      } if (!visinfo) {
+	printf("No OpenGL visual found!\n");
 	goto fail;
       }
-    DPRINTF3D(3, ("\r#### Selected GLX visual ID 0x%lx ####\r", visinfo->visualid));
-    if (verboseLevel >= 3)
+    printf("\n#### Selected GLX visual ID 0x%lx ####\n", visinfo->visualid);
+    if (true)
       printVisual(visinfo);
 
-    /* create context */
-    if (!(_renderContext(r)= glXCreateContext(stDisplay, visinfo, 0, GL_TRUE)))
+    GLXContext ctx_old = glXCreateContext(stDisplay, visinfo, 0, GL_TRUE);
+    glXCreateContextAttribsARBProc glXCreateContextAttribsARB = 0;
+    glXCreateContextAttribsARB = (glXCreateContextAttribsARBProc) glXGetProcAddress((const GLubyte*)"glXCreateContextAttribsARB");
+    /* Destroy old context */
+    glXMakeCurrent(stDisplay, 0, 0);
+    glXDestroyContext(stDisplay, ctx_old);
+    if (!glXCreateContextAttribsARB) {
+        printf("glXCreateContextAttribsARB() not found\n");
+        exit(1);
+    }
+
+    //*****************
+    if (!fbc) {
+        printf("glXChooseFBConfig() failed\n");
+        exit(1);
+    }
+
+    int attribs[] =
       {
-	DPRINTF3D(1, ("Creating GLX context failed!\r"));
+        GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
+        GLX_CONTEXT_MINOR_VERSION_ARB, 3,
+	// GLX_CONTEXT_PROFILE_MASK_ARB, GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB,
+	// GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_DEBUG_BIT_ARB,
+        None
+      };
+
+    if (!(_renderContext(r)= glXCreateContextAttribsARB(stDisplay, fbc[0], 0, GL_TRUE, attribs)))
+      {
+	printf("Creating GLX context failed!\n");
 	goto fail;
       }
-    DPRINTF3D(3, ("\r#### Created GLX context ####\r"  ));
+    printf("\n#### Created GLX context ####\n"  );
 
     /* create window */
     {
@@ -7063,33 +7107,130 @@ static sqInt display_ioGLcreateRenderer(glRenderer *r, sqInt x, sqInt y, sqInt w
 						    visinfo->depth, InputOutput, visinfo->visual, 
 						    valuemask, &attributes)))
 	{
-	  DPRINTF3D(1, ("Failed to create client window\r"));
+	  printf("Failed to create client window\n");
 	  goto fail;
 	}
       XMapWindow(stDisplay, renderWindow(r));
     }
-    DPRINTF3D(3, ("\r#### Created window ####\r"  ));
+    printf("\n#### Created window ####\n"  );
     XFree(visinfo);
     visinfo= 0;
   }
 
   /* Make the context current */
+  printf("SET CURRENT: %p\n", renderContext(r));
   if (!glXMakeCurrent(stDisplay, renderWindow(r), renderContext(r)))
     {
-      DPRINTF3D(1, ("Failed to make context current\r"));
+      printf("Failed to make context current\n");
       goto fail;
     }
-  DPRINTF3D(3, ("\r### Renderer created! ###\r"));
+  printf("SUCECESS\n");
+
+  {
+    int major = 0, minor = 0;
+    glGetIntegerv(GL_MAJOR_VERSION, &major);
+    glGetIntegerv(GL_MINOR_VERSION, &minor);
+    printf("OpenGL context created.\nVersion %d.%d\nVendor %s\nRenderer %s\n",
+	major, minor,
+	glGetString(GL_VENDOR),
+	glGetString(GL_RENDERER));
+  }
+
+  printf("\n### Renderer created! ###\n");
   return 1;
 
  fail:
-  DPRINTF3D(1, ("OpenGL initialization failed\r"));
+  printf("OpenGL initialization failed\n");
   if (visinfo)
     XFree(visinfo);
   if (renderContext(r))
     glXDestroyContext(stDisplay, renderContext(r));
   if (renderWindow(r))
     XDestroyWindow(stDisplay, renderWindow(r));
+#else
+    Display* disp = stDisplay;
+    Window win = 0;
+
+    /* Create_display_and_window
+       -------------------------
+       Skip if you already have a display and window */
+    disp = XOpenDisplay(0);
+    win = XCreateSimpleWindow(disp, stWindow,//DefaultRootWindow(disp),
+                              x, y,   /* x, y */
+                              w, h, /* width, height */
+                              0, 0,     /* border_width, border */
+                              0);       /* background */
+
+    /* Create_the_modern_OpenGL_context
+       -------------------------------- */
+    static int visual_attribs[] = {
+        GLX_RENDER_TYPE, GLX_RGBA_BIT,
+        GLX_DRAWABLE_TYPE, GLX_WINDOW_BIT,
+        GLX_DOUBLEBUFFER, true,
+        GLX_RED_SIZE, 1,
+        GLX_GREEN_SIZE, 1,
+        GLX_BLUE_SIZE, 1,
+        None
+    };
+
+    int num_fbc = 0;
+    GLXFBConfig *fbc = glXChooseFBConfig(disp,
+                                         DefaultScreen(disp),
+                                         visual_attribs, &num_fbc);
+    if (!fbc) {
+        printf("glXChooseFBConfig() failed\n");
+        exit(1);
+    }
+
+    /* Create old OpenGL context to get correct function pointer for
+       glXCreateContextAttribsARB() */
+    XVisualInfo *vi = glXGetVisualFromFBConfig(disp, fbc[0]);
+    GLXContext ctx_old = glXCreateContext(disp, vi, 0, GL_TRUE);
+    glXCreateContextAttribsARBProc glXCreateContextAttribsARB = 0;
+    glXCreateContextAttribsARB =
+        (glXCreateContextAttribsARBProc)
+        glXGetProcAddress((const GLubyte*)"glXCreateContextAttribsARB");
+    /* Destroy old context */
+    glXMakeCurrent(disp, 0, 0);
+    glXDestroyContext(disp, ctx_old);
+    if (!glXCreateContextAttribsARB) {
+        printf("glXCreateContextAttribsARB() not found\n");
+        exit(1);
+    }
+
+    /* Set desired minimum OpenGL version */
+    static int context_attribs[] = {
+        GLX_CONTEXT_MAJOR_VERSION_ARB, 3,
+        GLX_CONTEXT_MINOR_VERSION_ARB, 3,
+	// GLX_CONTEXT_PROFILE_MASK_ARB, GLX_CONTEXT_COMPATIBILITY_PROFILE_BIT_ARB,
+        None
+    };
+    /* Create modern OpenGL context */
+    GLXContext ctx = glXCreateContextAttribsARB(disp, fbc[0], NULL, true,
+                                                context_attribs);
+    if (!ctx) {
+        printf("Failed to create OpenGL context. Exiting.\n");
+        exit(1);
+    }
+
+    /* Show_the_window
+       --------------- */
+    XMapWindow(disp, win);
+    glXMakeCurrent(disp, win, ctx);
+
+    int major = 0, minor = 0;
+    glGetIntegerv(GL_MAJOR_VERSION, &major);
+    glGetIntegerv(GL_MINOR_VERSION, &minor);
+    printf("OpenGL context created.\nVersion %d.%d\nVendor %s\nRenderer %s\n",
+           major, minor,
+           glGetString(GL_VENDOR),
+           glGetString(GL_RENDERER));
+
+    _renderWindow(r) = win;
+    _renderContext(r) = ctx;
+    return 1;
+
+#endif
   return 0;
 }
 
@@ -7103,7 +7244,11 @@ static void display_ioGLdestroyRenderer(glRenderer *r)
 
 static void display_ioGLswapBuffers(glRenderer *r)
 {
+  printf("MAKE CURRENT!\n");
+  glXMakeCurrent(stDisplay, renderWindow(r), renderContext(r));
+  printf("SWAPPING BUFFERS!\n");
   glXSwapBuffers(stDisplay, renderWindow(r));
+  printf("SWAP COMPLETE!\n");
 }
 
 
@@ -7111,21 +7256,27 @@ static sqInt display_ioGLmakeCurrentRenderer(glRenderer *r)
 {
   if (r)
     {
+      printf("TRY TO MAKE CURRENT\n");
       if (!glXMakeCurrent(stDisplay, renderWindow(r), renderContext(r)))
 	{
-	  DPRINTF3D(1, ("Failed to make context current\r"));
+	  printf("Failed to make context current\n");
 	  return 0;
 	}
+      printf("FAILED TO MAKE CURRENT\n");
     }
-  else
+  else {
+    printf("NOTHING FOUND TO MAKE CURRENT\n");
     glXMakeCurrent(stDisplay, 0, 0);
+  }
   return 1;
 }
 
 
 static void display_ioGLsetBufferRect(glRenderer *r, sqInt x, sqInt y, sqInt w, sqInt h)
 {
+  printf("MOVE WINDOW\n");
   XMoveResizeWindow(stDisplay, renderWindow(r), x, y, w, h);
+  printf("COMPLETE WINDOW\n");
 }
 
 
@@ -7153,13 +7304,13 @@ static void printVisual(XVisualInfo* visinfo)
       glXGetConfig(stDisplay, visinfo, GLX_DEPTH_SIZE,    &depth);
 
       if (slow != GLX_SLOW_CONFIG)
-        DPRINTF3D(3, ("===> OpenGL visual\r"));
+        printf("===> OpenGL visual\n");
       else
-        DPRINTF3D(3, ("---> slow OpenGL visual\r"));
+        printf("---> slow OpenGL visual\n");
 
-      DPRINTF3D(3, ("rgbaBits = %i+%i+%i+%i\r", red, green, blue, alpha));
-      DPRINTF3D(3, ("stencilBits = %i\r", stencil));
-      DPRINTF3D(3, ("depthBits = %i\r", depth));
+      printf("rgbaBits = %i+%i+%i+%i\n", red, green, blue, alpha);
+      printf("stencilBits = %i\n", stencil);
+      printf("depthBits = %i\n", depth);
     }
   glGetError();	/* reset error flag */
 }
@@ -7173,7 +7324,7 @@ static void listVisuals(void)
 
   for (i= 0; i < nvisuals; i++)
     {
-      DPRINTF3D(3, ("#### Checking pixel format (visual ID 0x%lx)\r", visinfo[i].visualid));
+      printf("#### Checking pixel format (visual ID 0x%lx)\n", visinfo[i].visualid);
       printVisual(&visinfo[i]);
     }
   XFree(visinfo);
