@@ -65,6 +65,11 @@ if test "$have_x" = "yes"; then
           AC_SEARCH_LIBS([XRenderCreateCursor],[Xrender])
           break
         ])
+    AC_CHECK_HEADER([X11/extensions/XInput2.h], [
+          AC_DEFINE([HAVE_XINPUT2], [1], [Have Xinput2 library])
+          AC_SEARCH_LIBS([XISelectEvents],[Xi])
+          break
+        ])
   ],[
     AC_PLUGIN_DISABLE
   ])

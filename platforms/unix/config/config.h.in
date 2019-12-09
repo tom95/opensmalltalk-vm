@@ -264,6 +264,9 @@
 /* uuid/uuid.h */
 #undef HAVE_UUID_UUID_H
 
+/* Have Xinput2 library */
+#undef HAVE_XINPUT2
+
 /* Define to 1 if you have the `__snprintf' function. */
 #undef HAVE___SNPRINTF
 

@@ -139,6 +139,12 @@
 #  include "squeakIcon.bitmap"
 #endif
 
+#if defined(HAVE_XINPUT2)
+#include <X11/extensions/XI2.h>
+#include <X11/extensions/XInput2.h>
+int xi_opcode;
+#endif
+
 #if defined(HAVE_DLFCN_H)
 # include <dlfcn.h>
 #endif
@@ -3655,11 +3661,144 @@ handleEvent(XEvent *evt)
 	fprintf(stderr, "\n");
     }
 #endif
+
+#if defined(HAVE_XINPUT2)
+  // Check XInput2 events that we subscribe to
+  XGenericEventCookie *cookie = &evt->xcookie;
+  if (cookie->type == GenericEvent && cookie->extension == xi_opcode && XGetEventData(stDisplay, cookie)) {
+    XIEvent *xev = (XIEvent *) cookie->data;
+    XIDeviceEvent *xi_event = (XIDeviceEvent *) xev;
+    int modifiers = xi_event->mods.effective;
+
+    // note event state
+    if (xi_event->evtype == XI_ButtonPress || xi_event->evtype == XI_ButtonRelease) {
+      modifierState = x2sqModifier(modifiers);
+      mousePosition.x = xi_event->event_x;
+      mousePosition.y = xi_event->event_y;
+    }
+
+    switch (xi_event->evtype)
+    {
+      case XI_ButtonPress:
+      {
+	int button = xi_event->detail;
+	if (button <= 3) { /* mouse button */
+	  buttonState |= x2sqButton(button);
+	  recordMouseEvent();
+	} else if (button <= 7) { /* mouse wheel */
+	  XIValuatorState *valuators = &xi_event->valuators;
+	  double *values = valuators->values;
+	  double dx = 0, dy = 0;
+	  printf("%i %f %u \n", valuators->mask_len, values[0], valuators->mask[0]);
+	  for (int i = 0; i < valuators->mask_len; i++) {
+	    printf("\t%u\n", valuators->mask[i]);
+	  }
+	  for (int i = 0; i < valuators->mask_len * 8; i++) {
+	    if (XIMaskIsSet(valuators->mask, i)) {
+	      double value = *values++;
+	      printf("\t%i -> %f\n", i, value);
+	      if (i == 0)
+		dx = value;
+	      else if (i == 1)
+		dy = value;
+	    }
+	  }
+	  recordMouseWheelEvent(dx, dy);
+	} else
+	  ioBeep();
+	break;
+      }
+
+      case XI_ButtonRelease:
+	switch (xi_event->detail)
+	  {
+	  case 1:
+	  case 2:
+	  case 3:
+	    buttonState &= ~x2sqButton(xi_event->detail);
+	    recordMouseEvent();
+	    break;
+	  case 4:
+	  case 5:
+	  case 6:
+	  case 7: /* mouse wheel */
+	    break;
+	  default:
+	    ioBeep();
+	    break;
+	  }
+	break;
+    }
+    XFreeEventData(stDisplay, cookie);
+  }
+#endif
+
   if (True == XFilterEvent(evt, 0))
     return;
 
+  // Check events that are not part of Xinput
   switch (evt->type)
+  {
+#if 0
+    case EnterNotify:
+      if (inputContext && evt->xcrossing.focus && !(inputStyle & XIMPreeditPosition))
+	{
+	  setInputContextArea();
+	  XSetICFocus(inputContext);
+	}
+      break;
+
+    case LeaveNotify:
+      if (inputContext && evt->xcrossing.focus && !(inputStyle & XIMPreeditPosition))
+	XUnsetICFocus(inputContext);
+      break;
+#endif
+
+    case ButtonPress:
     {
+      int button = evt->xbutton.button;
+      noteEventState(evt->xbutton);
+      if (button <= 3) { /* mouse button */
+		buttonState |= x2sqButton(evt->xbutton.button);
+		recordMouseEvent();
+	  }
+	  else if (button <= 7) { /* mouse wheel */
+		if (sendWheelEvents)
+			recordMouseWheelEvent(mouseWheelXDelta[button - 4],
+								  mouseWheelYDelta[button - 4]);
+		else if (evt->xbutton.button <= 5) { /* only emulate up/down, as left/right
+												is used for text editing */
+		  int keyCode = mouseWheel2Squeak[evt->xbutton.button - 4];
+		  /* Set every meta bit to distinguish the fake event from a real
+		   * right/left arrow.
+		   */
+		  int modifiers = modifierState | (CtrlKeyBit|OptionKeyBit|CommandKeyBit|ShiftKeyBit);
+		  recordKeyboardEvent(keyCode, EventKeyDown, modifiers, keyCode);
+		  recordKeyboardEvent(keyCode, EventKeyChar, modifiers, keyCode);
+		  recordKeyboardEvent(keyCode, EventKeyUp,   modifiers, keyCode);
+		}
+	  }
+	  else
+		  ioBeep();
+      break;
+    }
+
+    case ButtonRelease:
+      noteEventState(evt->xbutton);
+      switch (evt->xbutton.button)
+	{
+	case 1: case 2: case 3:
+	  buttonState &= ~x2sqButton(evt->xbutton.button);
+	  recordMouseEvent();
+	  break;
+	case 4: case 5:	case 6: case 7: /* mouse wheel */
+	  break;
+	default:
+	  ioBeep();
+	  break;
+	}
+      break;
+
     case MotionNotify:
       noteEventState(evt->xmotion);
       recordMouseEvent();
@@ -3691,63 +3830,6 @@ handleEvent(XEvent *evt)
     case FocusOut:
       if (inputContext && (evt->xfocus.mode == NotifyNormal) && (evt->xfocus.detail == NotifyNonlinear))
 	XUnsetICFocus(inputContext);
-      break;
-
-#if 0
-    case EnterNotify:
-      if (inputContext && evt->xcrossing.focus && !(inputStyle & XIMPreeditPosition))
-	{
-	  setInputContextArea();
-	  XSetICFocus(inputContext);
-	}
-      break;
-
-    case LeaveNotify:
-      if (inputContext && evt->xcrossing.focus && !(inputStyle & XIMPreeditPosition))
-	XUnsetICFocus(inputContext);
-      break;
-#endif
-
-    case ButtonPress:
-      noteEventState(evt->xbutton);
-      if (evt->xbutton.button <= 3) { /* mouse button */
-		buttonState |= x2sqButton(evt->xbutton.button);
-		recordMouseEvent();
-	  }
-	  else if (evt->xbutton.button <= 7) { /* mouse wheel */
-		if (sendWheelEvents)
-			recordMouseWheelEvent(mouseWheelXDelta[evt->xbutton.button - 4],
-								  mouseWheelYDelta[evt->xbutton.button - 4]);
-		else if (evt->xbutton.button <= 5) { /* only emulate up/down, as left/right
-												is used for text editing */
-		  int keyCode = mouseWheel2Squeak[evt->xbutton.button - 4];
-		  /* Set every meta bit to distinguish the fake event from a real
-		   * right/left arrow.
-		   */
-		  int modifiers = modifierState | (CtrlKeyBit|OptionKeyBit|CommandKeyBit|ShiftKeyBit);
-		  recordKeyboardEvent(keyCode, EventKeyDown, modifiers, keyCode);
-		  recordKeyboardEvent(keyCode, EventKeyChar, modifiers, keyCode);
-		  recordKeyboardEvent(keyCode, EventKeyUp,   modifiers, keyCode);
-		}
-	  }
-	  else
-		  ioBeep();
-      break;
-
-    case ButtonRelease:
-      noteEventState(evt->xbutton);
-      switch (evt->xbutton.button)
-	{
-	case 1: case 2: case 3:
-	  buttonState &= ~x2sqButton(evt->xbutton.button);
-	  recordMouseEvent();
-	  break;
-	case 4: case 5:	case 6: case 7: /* mouse wheel */
-	  break;
-	default:
-	  ioBeep();
-	  break;
-	}
       break;
 
     case KeyPress:
@@ -4275,6 +4357,73 @@ static int xError(Display *dpy, XErrorEvent *evt)
   return 0;
 }
 
+#if defined(HAVE_XINPUT2)
+static list_devices()
+{
+  XIDeviceInfo *info;
+  int ndevices, i, j;
+  info = XIQueryDevice(stDisplay, XIAllDevices, &ndevices);
+  for (i = 0; i < ndevices; i++) {
+       XIScrollClassInfo *scroll;
+       printf("%s\n", info[i].name);
+       for (j = 0; j < info[i].num_classes; j++) {
+	    scroll = info[i].classes[j];
+	    if (scroll->type != XIScrollClass) {
+	      printf("Skipping %i\n", i);
+	      continue; /* Not interested in others */
+	    }
+
+	    printf("Device %i scrolls\n", i);
+	    printf("Valuator %d is a valuator for  ", scroll->number);
+	    switch(scroll->scroll_type) {
+		case XIScrollTypeVertical: printf("vertical"); break;
+		case XIScrollTypeHorizontal: printf("horizontal"); break;
+
+	    }
+
+	    printf(" scrolling\n");
+	    printf("Increment of %f is one scroll event\n", scroll->increment);
+	    if (scroll->flags & XIScrollFlagNoEmulation)
+		printf("No emulated button events for this axis\n");
+	    if (scroll->flags & XIScrollFlagPreferred)
+		printf("No emulated button events for this axis\n");
+     }
+  }
+  XIFreeDeviceInfo(info);
+}
+
+static void xinput2_select_events(Display *dpy, Window win)
+{
+    int ev, err;
+    if (!XQueryExtension(dpy, "XInputExtension", &xi_opcode, &ev, &err)) {
+        printf("X Input extension not available.\n");
+        return;
+    }
+
+    int major = 2;
+    int minor = 3;
+    XIQueryVersion(dpy, &major, &minor);
+    printf("XI: %i %i\n", major, minor);
+
+    XIEventMask evmask;
+    int len = XIMaskLen(XI_LASTEVENT);
+    unsigned char *mask = malloc(len);
+    memset(mask, 0, len);
+
+    XISetMask(mask, XI_ButtonPress);
+    XISetMask(mask, XI_ButtonRelease);
+
+    evmask.deviceid = 1;
+    evmask.mask_len = len;
+    evmask.mask = mask;
+
+    XISelectEvents(dpy, win, &evmask, 1);
+    XFlush(dpy);
+    list_devices();
+
+    free(mask);
+}
+#endif
 
 void initWindow(char *displayName)
 {
@@ -4500,6 +4649,9 @@ void initWindow(char *displayName)
 
   /* look for property changes on root window to track selection */
   XSelectInput(stDisplay, DefaultRootWindow(stDisplay), PropertyChangeMask);
+#if defined(HAVE_XINPUT2)
+  xinput2_select_events(stDisplay, stWindow);
+#endif
 
   /* set the geometry hints */
   if (!browserWindow)
