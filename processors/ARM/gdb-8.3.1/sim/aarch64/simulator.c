@@ -79,6 +79,7 @@
     }									\
   while (0)
 
+#if !COG
 /* Helper functions used by expandLogicalImmediate.  */
 
 /* for i = 1, ... N result<i-1> = 1 other bits are zero  */
@@ -94,6 +95,7 @@ pickbit (uint64_t val, int N)
 {
   return pickbits64 (val, N, N);
 }
+#endif
 
 static uint64_t
 expand_logical_immediate (uint32_t S, uint32_t R, uint32_t N)
@@ -14323,7 +14325,11 @@ aarch64_decode_and_execute (sim_cpu *cpu, uint64_t pc)
     }
 }
 
+#if COG
+bfd_boolean
+#else
 static bfd_boolean
+#endif
 aarch64_step (sim_cpu *cpu)
 {
   uint64_t pc = aarch64_get_PC (cpu);
@@ -14333,10 +14339,14 @@ aarch64_step (sim_cpu *cpu)
 
   aarch64_set_next_PC (cpu, pc + 4);
 
+#if COG
+  aarch64_get_instr (cpu) = aarch64_get_mem_u32(cpu, pc);
+#else
   /* Code is always little-endian.  */
   sim_core_read_buffer (CPU_STATE (cpu), cpu, read_map,
 			& aarch64_get_instr (cpu), pc, 4);
   aarch64_get_instr (cpu) = endian_le2h_4 (aarch64_get_instr (cpu));
+#endif
 
   TRACE_INSN (cpu, " pc = %" PRIx64 " instr = %08x", pc,
 	      aarch64_get_instr (cpu));

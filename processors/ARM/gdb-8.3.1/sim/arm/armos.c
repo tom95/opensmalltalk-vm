@@ -31,6 +31,10 @@
 #include <string.h>
 #include "targ-vals.h"
 
+#if COG
+# include "GdbARMPlugin.h"
+#endif
+
 #ifndef TARGET_O_BINARY
 #define TARGET_O_BINARY 0
 #endif
@@ -394,6 +398,19 @@ ARMul_OSHandleSWI (ARMul_State * state, ARMword number)
 
   switch (number)
     {
+#if COG
+    case SWI_CogPrefetch:
+      // TPR - This is the SWI number which is returned by our memory interface 
+      // if there is an instruction fetch for an illegal address.
+      state->Emulate = STOP;
+      state->EndCondition = InstructionPrefetchError;
+      
+      // during execution, the pc points the next fetch address, which is 8 byte after the current instruction.
+      gdb_log_printf(NULL, "Illegal Instruction fetch address (%#p).", state->Reg[15]-8);
+      return TRUE; // escape immediately
+      break;
+#endif
+
     case SWI_Read:
       if (swi_mask & SWI_MASK_DEMON)
 	SWIread (state, state->Reg[0], state->Reg[1], state->Reg[2]);
