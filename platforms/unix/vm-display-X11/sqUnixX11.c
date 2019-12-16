@@ -3671,63 +3671,45 @@ handleEvent(XEvent *evt)
     int modifiers = xi_event->mods.effective;
 
     // note event state
-    if (xi_event->evtype == XI_ButtonPress || xi_event->evtype == XI_ButtonRelease) {
+    if (xi_event->evtype == XI_Motion) {
       modifierState = x2sqModifier(modifiers);
       mousePosition.x = xi_event->event_x;
       mousePosition.y = xi_event->event_y;
     }
 
-    switch (xi_event->evtype)
+    if (xi_event->evtype == XI_Motion)
     {
-      case XI_ButtonPress:
-      {
-	int button = xi_event->detail;
-	if (button <= 3) { /* mouse button */
-	  buttonState |= x2sqButton(button);
-	  recordMouseEvent();
-	} else if (button <= 7) { /* mouse wheel */
-	  XIValuatorState *valuators = &xi_event->valuators;
-	  double *values = valuators->values;
-	  double dx = 0, dy = 0;
-	  printf("%i %f %u \n", valuators->mask_len, values[0], valuators->mask[0]);
-	  for (int i = 0; i < valuators->mask_len; i++) {
-	    printf("\t%u\n", valuators->mask[i]);
-	  }
-	  for (int i = 0; i < valuators->mask_len * 8; i++) {
-	    if (XIMaskIsSet(valuators->mask, i)) {
-	      double value = *values++;
-	      printf("\t%i -> %f\n", i, value);
-	      if (i == 0)
-		dx = value;
-	      else if (i == 1)
-		dy = value;
-	    }
-	  }
-	  recordMouseWheelEvent(dx, dy);
-	} else
-	  ioBeep();
-	break;
-      }
+      static double last_x = 0;
+      static double last_y = 0;
 
-      case XI_ButtonRelease:
-	switch (xi_event->detail)
-	  {
-	  case 1:
-	  case 2:
-	  case 3:
-	    buttonState &= ~x2sqButton(xi_event->detail);
-	    recordMouseEvent();
-	    break;
-	  case 4:
-	  case 5:
-	  case 6:
-	  case 7: /* mouse wheel */
-	    break;
-	  default:
-	    ioBeep();
-	    break;
+      XIValuatorState *valuators = &xi_event->valuators;
+      double *values = valuators->values;
+      double dx = 0, dy = 0;
+      /*printf("%i %f %u \n", valuators->mask_len, values[0], valuators->mask[0]);
+      for (int i = 0; i < valuators->mask_len; i++) {
+	printf("\t%u\n", valuators->mask[i]);
+      }*/
+
+      int had_scroll = 0;
+      for (int i = 0; i < valuators->mask_len * 8; i++) {
+	if (XIMaskIsSet(valuators->mask, i)) {
+	  double value = *values++;
+	  if (i == 2) {
+	    dx = value - last_x;
+	    last_x = value;
+	    had_scroll = 1;
+	  } else if (i == 3) {
+	    dy = value - last_y;
+	    last_y = value;
+	    had_scroll = 1;
 	  }
-	break;
+	}
+      }
+      if (had_scroll) {
+	printf("\t%f x %f\n", dx, dy);
+	recordMouseWheelEvent(dx, dy);
+      } else
+	recordMouseEvent();
     }
     XFreeEventData(stDisplay, cookie);
   }
@@ -3762,6 +3744,7 @@ handleEvent(XEvent *evt)
 		buttonState |= x2sqButton(evt->xbutton.button);
 		recordMouseEvent();
 	  }
+#if !HAVE_XINPUT2
 	  else if (button <= 7) { /* mouse wheel */
 		if (sendWheelEvents)
 			recordMouseWheelEvent(mouseWheelXDelta[button - 4],
@@ -3778,6 +3761,7 @@ handleEvent(XEvent *evt)
 		  recordKeyboardEvent(keyCode, EventKeyUp,   modifiers, keyCode);
 		}
 	  }
+#endif
 	  else
 		  ioBeep();
       break;
@@ -4410,8 +4394,7 @@ static void xinput2_select_events(Display *dpy, Window win)
     unsigned char *mask = malloc(len);
     memset(mask, 0, len);
 
-    XISetMask(mask, XI_ButtonPress);
-    XISetMask(mask, XI_ButtonRelease);
+    XISetMask(mask, XI_Motion);
 
     evmask.deviceid = 1;
     evmask.mask_len = len;
