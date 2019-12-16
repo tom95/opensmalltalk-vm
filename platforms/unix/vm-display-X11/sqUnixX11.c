@@ -3591,6 +3591,11 @@ static int mouseWheel2Squeak[4] = {30, 31, 28, 29};
 static int mouseWheelXDelta[4] = {0, 0, -120, 120};
 static int mouseWheelYDelta[4] = {120, -120, 0, 0};
 
+static int last_scroll_x_valid = 0;
+static int last_scroll_y_valid = 0;
+static double last_scroll_x = 0;
+static double last_scroll_y = 0;
+
 static void
 handleEvent(XEvent *evt)
 {
@@ -3679,34 +3684,34 @@ handleEvent(XEvent *evt)
 
     if (xi_event->evtype == XI_Motion)
     {
-      static double last_x = 0;
-      static double last_y = 0;
-
       XIValuatorState *valuators = &xi_event->valuators;
       double *values = valuators->values;
       double dx = 0, dy = 0;
-      /*printf("%i %f %u \n", valuators->mask_len, values[0], valuators->mask[0]);
-      for (int i = 0; i < valuators->mask_len; i++) {
-	printf("\t%u\n", valuators->mask[i]);
-      }*/
-
       int had_scroll = 0;
       for (int i = 0; i < valuators->mask_len * 8; i++) {
 	if (XIMaskIsSet(valuators->mask, i)) {
 	  double value = *values++;
 	  if (i == 2) {
-	    dx = value - last_x;
-	    last_x = value;
+	    if (last_scroll_x_valid)
+	      dx = value - last_scroll_x;
+	    else
+	      last_scroll_x_valid = 1;
+
+	    last_scroll_x = value;
 	    had_scroll = 1;
 	  } else if (i == 3) {
-	    dy = value - last_y;
-	    last_y = value;
+	    if (last_scroll_y_valid)
+	      dy = value - last_scroll_y;
+	    else
+	      last_scroll_y_valid = 1;
+
+	    last_scroll_y = value;
 	    had_scroll = 1;
 	  }
 	}
       }
       if (had_scroll) {
-	printf("\t%f x %f\n", dx, dy);
+	// printf("\t%f x %f\n", dx, dy);
 	recordMouseWheelEvent(dx, dy);
       } else
 	recordMouseEvent();
@@ -4360,9 +4365,12 @@ static list_devices()
 	    printf("Device %i scrolls\n", i);
 	    printf("Valuator %d is a valuator for  ", scroll->number);
 	    switch(scroll->scroll_type) {
-		case XIScrollTypeVertical: printf("vertical"); break;
-		case XIScrollTypeHorizontal: printf("horizontal"); break;
-
+		case XIScrollTypeVertical:
+		  printf("vertical");
+		  break;
+		case XIScrollTypeHorizontal:
+		  printf("horizontal");
+		  break;
 	    }
 
 	    printf(" scrolling\n");
