@@ -3749,8 +3749,8 @@ handleEvent(XEvent *evt)
 		buttonState |= x2sqButton(evt->xbutton.button);
 		recordMouseEvent();
 	  }
-#if !HAVE_XINPUT2
 	  else if (button <= 7) { /* mouse wheel */
+#if !HAVE_XINPUT2
 		if (sendWheelEvents)
 			recordMouseWheelEvent(mouseWheelXDelta[button - 4],
 								  mouseWheelYDelta[button - 4]);
@@ -3765,10 +3765,9 @@ handleEvent(XEvent *evt)
 		  recordKeyboardEvent(keyCode, EventKeyChar, modifiers, keyCode);
 		  recordKeyboardEvent(keyCode, EventKeyUp,   modifiers, keyCode);
 		}
-	  }
 #endif
-	  else
-		  ioBeep();
+	  } else
+	    ioBeep();
       break;
     }
 
