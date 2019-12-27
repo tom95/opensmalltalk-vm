@@ -121,7 +121,11 @@ static sqInputEvent *allocateInputEvent(int eventType)
 )
 
 #define allocateMouseWheelEvent() ( \
-  (sqKeyboardEvent *)allocateInputEvent(EventTypeMouseWheel) \
+  (sqMouseEvent *)allocateInputEvent(EventTypeMouseWheel) \
+)
+
+#define allocateTouchEvent() ( \
+  (sqTouchEvent *)allocateInputEvent(EventTypeTouch) \
 )
 
 #define allocateDragEvent() ( \
@@ -181,6 +185,18 @@ static void recordMouseEvent(void)
 #endif
 }
 
+static void recordTouchEvent(int x, int y, int sequence, int touchType) {
+  int state = getButtonState();
+  sqTouchEvent *evt = allocateTouchEvent();
+  evt->x = x;
+  evt->y = y;
+  evt->touchType = touchType;
+  evt->modifiers = (state >> 3);
+  evt->sequence = sequence;
+  evt->windowIndex = 0;
+  signalInputEvent();
+}
+
 static void recordMouseWheelEvent(int dx, int dy)
 {
   sqMouseEvent *evt= allocateMouseWheelEvent();
@@ -195,7 +211,6 @@ static void recordMouseWheelEvent(int dx, int dy)
   printf("\n");
 #endif
 }
-
 
 static void recordKeyboardEvent(int keyCode, int pressCode, int modifiers, int ucs4)
 {

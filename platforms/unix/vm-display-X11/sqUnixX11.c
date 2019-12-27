@@ -3591,10 +3591,22 @@ static int mouseWheel2Squeak[4] = {30, 31, 28, 29};
 static int mouseWheelXDelta[4] = {0, 0, -120, 120};
 static int mouseWheelYDelta[4] = {120, -120, 0, 0};
 
-static int last_scroll_x_valid = 0;
-static int last_scroll_y_valid = 0;
-static double last_scroll_x = 0;
-static double last_scroll_y = 0;
+#if HAVE_XINPUT2
+// Stores the xinput devices. Right now it only contains scrolling info.
+// In the future, we will extract the scroll info and have a generic list
+// of possible axis that this device outputs.
+typedef struct {
+  int device_number;
+  int last_scroll_x_valid;
+  int last_scroll_y_valid;
+  double last_scroll_x;
+  double last_scroll_y;
+  int horizontal_class;
+  int vertical_class;
+} input_device_t;
+static int num_input_devices = 0;
+static input_device_t *input_devices;
+#endif
 
 static void
 handleEvent(XEvent *evt)
@@ -3675,46 +3687,91 @@ handleEvent(XEvent *evt)
     XIDeviceEvent *xi_event = (XIDeviceEvent *) xev;
     int modifiers = xi_event->mods.effective;
 
-    // note event state
-    if (xi_event->evtype == XI_Motion) {
-      modifierState = x2sqModifier(modifiers);
-      mousePosition.x = xi_event->event_x;
-      mousePosition.y = xi_event->event_y;
-    }
-
-    if (xi_event->evtype == XI_Motion)
+    switch (xi_event->evtype)
     {
-      XIValuatorState *valuators = &xi_event->valuators;
-      double *values = valuators->values;
-      double dx = 0, dy = 0;
-      int had_scroll = 0;
-      for (int i = 0; i < valuators->mask_len * 8; i++) {
-	if (XIMaskIsSet(valuators->mask, i)) {
-	  double value = *values++;
-	  if (i == 2) {
-	    if (last_scroll_x_valid)
-	      dx = value - last_scroll_x;
-	    else
-	      last_scroll_x_valid = 1;
+      case XI_Motion:
+      {
+	// note event state
+	modifierState = x2sqModifier(modifiers);
+	mousePosition.x = xi_event->event_x;
+	mousePosition.y = xi_event->event_y;
 
-	    last_scroll_x = value;
-	    had_scroll = 1;
-	  } else if (i == 3) {
-	    if (last_scroll_y_valid)
-	      dy = value - last_scroll_y;
-	    else
-	      last_scroll_y_valid = 1;
+	XIValuatorState *valuators = &xi_event->valuators;
+	double *values = valuators->values;
+	double dx = 0, dy = 0;
+	int had_scroll = 0;
 
-	    last_scroll_y = value;
-	    had_scroll = 1;
+	input_device_t *device = NULL;
+	for (int i = 0; i < num_input_devices; i++) {
+	  if (input_devices[i].device_number == xi_event->sourceid) {
+	    device = &input_devices[i];
+	    break;
 	  }
 	}
+	if (device == NULL) {
+	  XFreeEventData(stDisplay, cookie);
+	  return;
+	}
+
+	for (int i = 0; i < valuators->mask_len * 8; i++) {
+	  if (XIMaskIsSet(valuators->mask, i)) {
+	    double value = *values++;
+	    if (i == device->horizontal_class) {
+	      if (device->last_scroll_x_valid)
+		dx = value - device->last_scroll_x;
+	      else
+		device->last_scroll_x_valid = 1;
+	      device->last_scroll_x = value;
+	      had_scroll = 1;
+	    } else if (i == device->vertical_class) {
+	      if (device->last_scroll_y_valid)
+		dy = value - device->last_scroll_y;
+	      else
+		device->last_scroll_y_valid = 1;
+	      device->last_scroll_y = value;
+	      had_scroll = 1;
+	    }
+	  }
+	}
+	if (had_scroll) {
+	  // printf("\t%f x %f\n", dx, dy);
+	  recordMouseWheelEvent(dx, dy);
+	} else
+	  recordMouseEvent();
+	break;
       }
-      if (had_scroll) {
-	// printf("\t%f x %f\n", dx, dy);
-	recordMouseWheelEvent(dx, dy);
-      } else
-	recordMouseEvent();
+
+      case XI_RawTouchBegin:
+      case XI_TouchBegin:
+	printf("begin: %i %f %f\n", xi_event->detail, xi_event->event_x, xi_event->event_y);
+	recordTouchEvent(xi_event->event_x, xi_event->event_y, xi_event->detail, 0);
+	if (xi_event->flags & XITouchEmulatingPointer) {
+	  modifierState = x2sqModifier(modifiers);
+	  mousePosition.x = xi_event->event_x;
+	  mousePosition.y = xi_event->event_y;
+	  printf("EMULATING press");
+	  buttonState |= x2sqButton(xi_event->buttons.mask[0]);
+	  recordMouseEvent();
+	}
+	break;
+      case XI_TouchUpdate:
+      case XI_RawTouchUpdate:
+	printf("update: %i %f %f\n", xi_event->detail, xi_event->event_x, xi_event->event_y);
+	recordTouchEvent(xi_event->event_x, xi_event->event_y, xi_event->detail, 1);
+	break;
+      case XI_TouchEnd:
+      case XI_RawTouchEnd:
+	printf("end: %i %f %f\n", xi_event->detail, xi_event->event_x, xi_event->event_y);
+	if (xi_event->flags & XITouchEmulatingPointer) {
+	  printf("EMULATING release");
+	  modifierState = x2sqModifier(modifiers);
+	  mousePosition.x = xi_event->event_x;
+	  mousePosition.y = xi_event->event_y;
+	  buttonState &= ~x2sqButton(xi_event->buttons.mask[0]);
+	  recordMouseEvent();
+	}
+	recordTouchEvent(xi_event->event_x, xi_event->event_y, xi_event->detail, 2);
+	break;
     }
     XFreeEventData(stDisplay, cookie);
   }
@@ -3818,6 +3875,13 @@ handleEvent(XEvent *evt)
     case FocusOut:
       if (inputContext && (evt->xfocus.mode == NotifyNormal) && (evt->xfocus.detail == NotifyNonlinear))
 	XUnsetICFocus(inputContext);
+#if HAVE_XINPUT2
+      for (int i = 0; i < num_input_devices; i++) {
+	input_device_t *device = &input_devices[i];
+	device->last_scroll_x_valid = 0;
+	device->last_scroll_y_valid = 0;
+      }
+#endif
       break;
 
     case KeyPress:
@@ -4351,34 +4415,61 @@ static list_devices()
   XIDeviceInfo *info;
   int ndevices, i, j;
   info = XIQueryDevice(stDisplay, XIAllDevices, &ndevices);
+
+  int current_device = 0;
+  input_devices = (input_device_t *) calloc(sizeof(input_device_t), ndevices);
+  num_input_devices = ndevices;
+
   for (i = 0; i < ndevices; i++) {
-       XIScrollClassInfo *scroll;
-       printf("%s\n", info[i].name);
-       for (j = 0; j < info[i].num_classes; j++) {
-	    scroll = info[i].classes[j];
-	    if (scroll->type != XIScrollClass) {
-	      printf("Skipping %i\n", i);
-	      continue; /* Not interested in others */
-	    }
+    XIScrollClassInfo *scroll;
+    XITouchClassInfo *touch;
+    int horizontal_class = -1;
+    int vertical_class = -1;
 
-	    printf("Device %i scrolls\n", i);
-	    printf("Valuator %d is a valuator for  ", scroll->number);
-	    switch(scroll->scroll_type) {
-		case XIScrollTypeVertical:
-		  printf("vertical");
-		  break;
-		case XIScrollTypeHorizontal:
-		  printf("horizontal");
-		  break;
-	    }
+    printf("%s\n", info[i].name);
+    for (j = 0; j < info[i].num_classes; j++) {
+      scroll = (XIScrollClassInfo *) info[i].classes[j];
+      switch (scroll->type) {
+	case XITouchClass:
+	  touch = (XITouchClassInfo *) info[i].classes[j];
+	  printf("\tTouch Valuator %d is a valuator for ", touch->mode);
+	  switch (touch->mode) {
+	    case XIDirectTouch:
+	      printf("direct");
+	      break;
+	    case XIDependentTouch:
+	      printf("direct");
+	      break;
+	  }
+	  printf("touch, num touches: %d\n", touch->num_touches);
+	  break;
+	case XIScrollClass:
+	  scroll = (XIScrollClassInfo *) info[i].classes[j];
+	  printf("\tScroll Valuator %d is a valuator for ", scroll->number);
+	  switch(scroll->scroll_type) {
+	    case XIScrollTypeVertical:
+	      printf("vertical");
+	      vertical_class = scroll->number;
+	      break;
+	    case XIScrollTypeHorizontal:
+	      printf("horizontal");
+	      horizontal_class = scroll->number;
+	      break;
+	  }
 
-	    printf(" scrolling\n");
-	    printf("Increment of %f is one scroll event\n", scroll->increment);
-	    if (scroll->flags & XIScrollFlagNoEmulation)
-		printf("No emulated button events for this axis\n");
-	    if (scroll->flags & XIScrollFlagPreferred)
-		printf("No emulated button events for this axis\n");
-     }
+	  printf(" scrolling, increment of %f is one scroll event\n", scroll->increment);
+	  if (scroll->flags & XIScrollFlagNoEmulation)
+	    printf("\tNo emulated button events for this axis\n");
+	  if (scroll->flags & XIScrollFlagPreferred)
+	    printf("\tNo emulated button events for this axis\n");
+	  break;
+      }
+    }
+
+    input_devices[current_device].device_number = info[i].deviceid;
+    input_devices[current_device].horizontal_class = horizontal_class;
+    input_devices[current_device].vertical_class = vertical_class;
+    current_device++;
   }
   XIFreeDeviceInfo(info);
 }
@@ -4395,6 +4486,7 @@ static void xinput2_select_events(Display *dpy, Window win)
     int minor = 3;
     XIQueryVersion(dpy, &major, &minor);
     printf("XI: %i %i\n", major, minor);
+    list_devices();
 
     XIEventMask evmask;
     int len = XIMaskLen(XI_LASTEVENT);
@@ -4402,14 +4494,17 @@ static void xinput2_select_events(Display *dpy, Window win)
     memset(mask, 0, len);
 
     XISetMask(mask, XI_Motion);
+    XISetMask(mask, XI_TouchOwnership);
+    XISetMask(mask, XI_TouchBegin);
+    XISetMask(mask, XI_TouchUpdate);
+    XISetMask(mask, XI_TouchEnd);
 
-    evmask.deviceid = 1;
+    evmask.deviceid = XIAllMasterDevices;
     evmask.mask_len = len;
     evmask.mask = mask;
 
     XISelectEvents(dpy, win, &evmask, 1);
     XFlush(dpy);
-    list_devices();
 
     free(mask);
 }

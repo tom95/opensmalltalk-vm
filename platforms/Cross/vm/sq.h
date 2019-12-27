@@ -416,6 +416,7 @@ sqInt ioProcessEvents(void);
 #define EventTypeComplex	6 /* For iPhone apps */
 #define EventTypeMouseWheel	7 /* optional; see sendWheelEvents & vm param 48 */
 #define EventTypePlugin		8 /* Terf: events from ActiveX Controls */
+#define EventTypeTouch		9
 
 
 /* Keypress state for keyboard events. */
@@ -460,6 +461,19 @@ typedef struct sqMouseEvent
   sqIntptr_t nrClicks;			/* number of clicks in button downs - was reserved1 */
   sqIntptr_t windowIndex;			/* host window structure */
 } sqMouseEvent;
+
+/* touch input event */
+typedef struct sqTouchEvent
+{
+  sqIntptr_t type;				/* EventTypeMouse */
+  usqIntptr_t timeStamp;	/* time stamp */
+  sqIntptr_t x;					/* finger position x */
+  sqIntptr_t y;					/* finger position y */
+  sqIntptr_t touchType;				/* one of 0=begin, 1=update, 2=end */
+  sqIntptr_t modifiers;			/* combination of xxxKeyBit */
+  sqIntptr_t sequence;			/* identifies finger being moved */
+  sqIntptr_t windowIndex;			/* host window structure */
+} sqTouchEvent;
 
 /* keyboard input event */
 typedef struct sqKeyboardEvent
