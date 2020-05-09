@@ -7170,7 +7170,6 @@ static sqInt display_ioGLcreateRenderer(glRenderer *r, sqInt x, sqInt y, sqInt w
       DPRINTF3D(1, ("Negative extent (%i@%i)!\r", w, h));
       goto fail;
     }
-      printf("HELLO WORLD\n");
 
   {
     const char *extensions = glXQueryExtensionsString(stDisplay, DefaultScreen(stDisplay));
