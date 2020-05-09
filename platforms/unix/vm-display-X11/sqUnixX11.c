@@ -7129,14 +7129,35 @@ static sqInt display_ioGLinitialise(void) { return 1; }
 #define _renderContext(R)	((R)->context)
 #define renderContext(R)	((GLXContext)(R)->context)
 
+typedef GLXContext (*glXCreateContextAttribsARBProc)(Display*, GLXFBConfig, GLXContext, Bool, const int*);
+
+static int isExtensionSupported(const char *extensions, const char *extension)
+{
+  const char *start = extensions;
+  while (1) {
+    start = strstr(start, extension);
+
+    if (!start)
+      break;
+
+    const char *end = start + strlen(extension);
+    // if we matched at the start of a term && matched till the end of a term
+    if ((extensions == start || *(start - 1) == ' ') && (*end == ' ' || *end == '\0'))
+      return GL_TRUE;
+
+    start = end;
+  }
+
+  return GL_FALSE;
+}
+
 static sqInt display_ioGLcreateRenderer(glRenderer *r, sqInt x, sqInt y, sqInt w, sqInt h, sqInt flags)
 {
-  XVisualInfo* visinfo= 0;
+  Visual *visual;
+  int depth;
+  XVisualInfo* visinfo = 0;
+  GLXFBConfig* fb_configs = 0;
 
-  if (flags & B3D_STENCIL_BUFFER)
-    visualAttributes[1]= 1;
-  else 
-    visualAttributes[1]= 0;
   _renderWindow(r)= 0;
   _renderContext(r)= 0;
 
@@ -7148,62 +7169,138 @@ static sqInt display_ioGLcreateRenderer(glRenderer *r, sqInt x, sqInt y, sqInt w
       DPRINTF3D(1, ("Negative extent (%i@%i)!\r", w, h));
       goto fail;
     }
-  /* choose visual and create context */
-  if (verboseLevel >= 3)
-    listVisuals();
-  {
-    visinfo= glXChooseVisual(stDisplay, DefaultScreen(stDisplay), visualAttributes);
-    if (!visinfo)
-      {
-	/* retry without alpha */
-	visualAttributes[3]= 0;
-	visinfo= glXChooseVisual(stDisplay, DefaultScreen(stDisplay), visualAttributes);
-      }
-    if (!visinfo)
-      {
-	DPRINTF3D(1, ("No OpenGL visual found!\r"));
-	goto fail;
-      }
-    DPRINTF3D(3, ("\r#### Selected GLX visual ID 0x%lx ####\r", visinfo->visualid));
-    if (verboseLevel >= 3)
-      printVisual(visinfo);
+      printf("HELLO WORLD\n");
 
-    /* create context */
-    if (!(_renderContext(r)= glXCreateContext(stDisplay, visinfo, 0, GL_TRUE)))
+  {
+    const char *extensions = glXQueryExtensionsString(stDisplay, DefaultScreen(stDisplay));
+    glXCreateContextAttribsARBProc glXCreateContextAttribsARB = 0;
+    glXCreateContextAttribsARB = (glXCreateContextAttribsARBProc)
+      glXGetProcAddressARB((const GLubyte *) "glXCreateContextAttribsARB");
+    if (!isExtensionSupported(extensions, "GLX_ARB_create_context") || !glXCreateContextAttribsARB) {
+      DPRINTF3D(1, ("Creating modern GLX context is not supported"));
+old_style_context_creation:
+      printf("not supported\n");
+
+      if (flags & B3D_STENCIL_BUFFER)
+	visualAttributes[1]= 1;
+      else 
+	visualAttributes[1]= 0;
+
+      /* choose visual and create context */
+      if (verboseLevel >= 3) listVisuals();
+
+      visinfo = glXChooseVisual(stDisplay, DefaultScreen(stDisplay), visualAttributes);
+      if (!visinfo)
+	{
+	  /* retry without alpha */
+	  visualAttributes[3]= 0;
+	  visinfo= glXChooseVisual(stDisplay, DefaultScreen(stDisplay), visualAttributes);
+	}
+      if (!visinfo)
+	{
+	  DPRINTF3D(1, ("No OpenGL visual found!\r"));
+	  goto fail;
+	}
+      DPRINTF3D(3, ("\r#### Selected GLX visual ID 0x%lx ####\r", visinfo->visualid));
+      if (verboseLevel >= 3)
+	printVisual(visinfo);
+
+      if (!(_renderContext(r) = glXCreateContext(stDisplay, visinfo, 0, GL_TRUE)))
       {
 	DPRINTF3D(1, ("Creating GLX context failed!\r"));
 	goto fail;
       }
-    DPRINTF3D(3, ("\r#### Created GLX context ####\r"  ));
+      visual = visinfo->visual;
+      depth = visinfo->depth;
 
-    /* create window */
-    {
-      XSetWindowAttributes attributes;
-      unsigned long valuemask= 0;
-
-      attributes.colormap= XCreateColormap(stDisplay, DefaultRootWindow(stDisplay),
-					   visinfo->visual, AllocNone);
-      valuemask |= CWColormap;
-
-      attributes.background_pixel= BlackPixel(stDisplay, DefaultScreen(stDisplay));
-      valuemask |= CWBackPixel;
-
-      attributes.border_pixel= 0;
-      valuemask |= CWBorderPixel;
-
-      if (!(_renderWindow(r)= (void *)XCreateWindow(stDisplay, stWindow, x, y, w, h, 0,
-						    visinfo->depth, InputOutput, visinfo->visual, 
-						    valuemask, &attributes)))
-	{
-	  DPRINTF3D(1, ("Failed to create client window\r"));
-	  goto fail;
-	}
-      XMapWindow(stDisplay, renderWindow(r));
+      XFree(visinfo);
+      visinfo= 0;
     }
-    DPRINTF3D(3, ("\r#### Created window ####\r"  ));
-    XFree(visinfo);
-    visinfo= 0;
+    else
+    {
+      int context_attribs[] = {
+	GLX_CONTEXT_MAJOR_VERSION_ARB, 4,
+	GLX_CONTEXT_MINOR_VERSION_ARB, 6,
+	GLX_CONTEXT_FLAGS_ARB, GLX_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB,
+	GLX_CONTEXT_PROFILE_MASK_ARB, GLX_CONTEXT_CORE_PROFILE_BIT_ARB,
+	None
+      };
+      int visual_attribs[] = {
+	GLX_X_RENDERABLE    , GL_TRUE,
+	GLX_DRAWABLE_TYPE   , GLX_WINDOW_BIT,
+	GLX_RENDER_TYPE     , GLX_RGBA_BIT,
+	GLX_X_VISUAL_TYPE   , GLX_TRUE_COLOR,
+	GLX_RED_SIZE        , 8,
+	GLX_GREEN_SIZE      , 8,
+	GLX_BLUE_SIZE       , 8,
+	GLX_ALPHA_SIZE      , 8,
+	GLX_DEPTH_SIZE      , 24,
+	GLX_STENCIL_SIZE    , flags & B3D_STENCIL_BUFFER ? 8 : 0,
+	GLX_DOUBLEBUFFER    , GL_TRUE,
+	None
+      };
+      int fbcount;
+      fb_configs = glXChooseFBConfig(stDisplay, DefaultScreen(stDisplay), visual_attribs, &fbcount);
+      int best_fbc = -1, best_num_samp = -1;
+      for (int i = 0; i < fbcount; i++) {
+	XVisualInfo *vi = glXGetVisualFromFBConfig(stDisplay, fb_configs[i]);
+	if (vi) {
+	  int samp_buf, samples;
+	  glXGetFBConfigAttrib(stDisplay, fb_configs[i], GLX_SAMPLE_BUFFERS, &samp_buf);
+	  glXGetFBConfigAttrib(stDisplay, fb_configs[i], GLX_SAMPLES, &samples);
+
+	  if (best_fbc < 0 || (samp_buf && samples > best_num_samp)) {
+	    best_fbc = i;
+	    best_num_samp = samples;
+	    visual = vi->visual;
+	    depth = vi->depth;
+	  }
+	}
+	XFree(vi);
+      }
+
+      if (!(_renderContext(r)= glXCreateContextAttribsARB(stDisplay, fb_configs[best_fbc], 0, GL_TRUE, context_attribs))) {
+	DPRINTF3D(1, ("Creating 3.0 GLX context failed!\r"));
+	XFree(fb_configs);
+	goto old_style_context_creation;
+      }
+
+      XSync(stDisplay, GL_FALSE);
+      // XSetErrorHandler( oldHandler );
+
+      // glXQueryContext(stDisplay, _renderContext(r), );
+
+      XFree(fb_configs);
+    }
+
+    DPRINTF3D(3, ("\r#### Created GLX context ####\r"  ));
   }
+
+  /* create window */
+  {
+    XSetWindowAttributes attributes;
+    unsigned long valuemask= 0;
+
+    attributes.colormap= XCreateColormap(stDisplay, DefaultRootWindow(stDisplay),
+					 visual, AllocNone);
+    valuemask |= CWColormap;
+
+    attributes.background_pixel= BlackPixel(stDisplay, DefaultScreen(stDisplay));
+    valuemask |= CWBackPixel;
+
+    attributes.border_pixel= 0;
+    valuemask |= CWBorderPixel;
+
+    if (!(_renderWindow(r)= (void *)XCreateWindow(stDisplay, stWindow, x, y, w, h, 0,
+						  depth, InputOutput, visual, 
+						  valuemask, &attributes)))
+      {
+	DPRINTF3D(1, ("Failed to create client window\r"));
+	goto fail;
+      }
+    XMapWindow(stDisplay, renderWindow(r));
+  }
+  DPRINTF3D(3, ("\r#### Created window ####\r"  ));
 
   /* Make the context current */
   if (!glXMakeCurrent(stDisplay, renderWindow(r), renderContext(r)))
@@ -7212,10 +7309,21 @@ static sqInt display_ioGLcreateRenderer(glRenderer *r, sqInt x, sqInt y, sqInt w
       goto fail;
     }
   DPRINTF3D(3, ("\r### Renderer created! ###\r"));
+
+  int major = 0, minor = 0;
+  glGetIntegerv(GL_MAJOR_VERSION, &major);
+  glGetIntegerv(GL_MINOR_VERSION, &minor);
+  printf("OpenGL context created.\nVersion %d.%d\nVendor %s\nRenderer %s\n",
+      major, minor,
+      glGetString(GL_VENDOR),
+      glGetString(GL_RENDERER));
+
   return 1;
 
  fail:
   DPRINTF3D(1, ("OpenGL initialization failed\r"));
+  if (fb_configs)
+    XFree(fb_configs);
   if (visinfo)
     XFree(visinfo);
   if (renderContext(r))
