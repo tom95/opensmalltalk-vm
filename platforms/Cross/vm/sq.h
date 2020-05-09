@@ -16,6 +16,7 @@
 #include "sqConfig.h"
 
 #include <math.h>
+#include "sqMathShim.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -100,6 +101,11 @@
 extern void *sqAllocateMemorySegmentOfSizeAboveAllocatedSizeInto(sqInt sz, void *minAddr, sqInt *asp);
 extern void sqDeallocateMemorySegmentAtOfSize(void *addr, sqInt sz);
 #endif /* SPURVM */
+#if COGVM
+extern void sqMakeMemoryExecutableFromToCodeToDataDelta(usqInt, usqInt, sqInt*);
+extern void sqMakeMemoryNotExecutableFromTo(usqInt, usqInt);
+#endif
+
 /* Platform-dependent memory size adjustment macro. */
 
 /* Note: This macro can be redefined to allows platforms with a
@@ -164,14 +170,14 @@ long ioMicroMSecs(void);
 
 #if STACKVM
 extern void forceInterruptCheckFromHeartbeat(void);
-unsigned volatile long long  ioUTCMicrosecondsNow();
-unsigned volatile long long  ioUTCMicroseconds();
-unsigned volatile long long  ioLocalMicrosecondsNow();
-unsigned volatile long long  ioLocalMicroseconds();
-unsigned          long long  ioUTCStartMicroseconds();
-sqInt	ioLocalSecondsOffset();
-void	ioUpdateVMTimezone();
-void	ioSynchronousCheckForEvents();
+unsigned long long ioUTCMicrosecondsNow(void);
+unsigned long long ioUTCMicroseconds(void);
+unsigned long long ioLocalMicrosecondsNow(void);
+unsigned long long ioLocalMicroseconds(void);
+unsigned long long ioUTCStartMicroseconds(void);
+sqInt	ioLocalSecondsOffset(void);
+void	ioUpdateVMTimezone(void);
+void	ioSynchronousCheckForEvents(void);
 void	checkHighPriorityTickees(usqLong);
 # if ITIMER_HEARTBEAT		/* Hack; allow heartbeat to avoid */
 extern int numAsyncTickees; /* prodHighPriorityThread unless necessary */
@@ -221,6 +227,22 @@ sqInt sqGetFilenameFromString(char * aCharBuffer, char * aFilenameString, sqInt 
 
 #include "sqPlatformSpecific.h"
 
+/* getReturnAddress optionally defined here rather than in sqPlatformSpecific.h
+ * to reduce duplication. The GCC intrinics are provided by other compilers too.
+ */
+#if COGVM && !defined(getReturnAddress)
+# if _MSC_VER
+#	define getReturnAddress() _ReturnAddress()
+#	include <intrin.h>
+#	pragma intrinsic(_ReturnAddress)
+# elif defined(__GNUC__) /* gcc, clang, icc etc */
+#	define getReturnAddress() __builtin_extract_return_addr(__builtin_return_address(0))
+# else
+#	error "Cog requires getReturnAddress defining for the current platform."
+# endif
+#endif /* COG && !defined(getReturnAddress */
+
+
 /* Interpreter entry points. */
 
 /* Disable Intel compiler inlining of error which is used for breakpoints */
@@ -264,6 +286,7 @@ sqInt ioSeconds(void);
 sqInt ioSecondsNow(void);
 sqInt ioSetCursor(sqInt cursorBitsIndex, sqInt offsetX, sqInt offsetY);
 sqInt ioSetCursorWithMask(sqInt cursorBitsIndex, sqInt cursorMaskIndex, sqInt offsetX, sqInt offsetY);
+sqInt ioSetCursorARGB(sqInt cursorBitsIndex, sqInt extentX, sqInt extentY, sqInt offsetX, sqInt offsetY);
 sqInt ioShowDisplay(sqInt dispBitsIndex, sqInt width, sqInt height, sqInt depth,
 		    sqInt affectedL, sqInt affectedR, sqInt affectedT, sqInt affectedB);
 sqInt ioHasDisplayDepth(sqInt depth);
@@ -280,7 +303,7 @@ sqInt ioIsWindowObscured(void);
 sqInt ioRelinquishProcessorForMicroseconds(sqInt microSeconds);
 #if STACKVM || NewspeakVM
 /* thread subsystem support for e.g. sqExternalSemaphores.c */
-void ioInitThreads();
+void ioInitThreads(void);
 
 /* Management of the external semaphore table (max size set at startup) */
 #if !defined(INITIAL_EXT_SEM_TABLE_SIZE)
@@ -330,7 +353,7 @@ extern char *thrlog[];
 	asprintf(thrlog + myidx, __VA_ARGS__); \
 } while (0)
 
-extern sqOSThread getVMOSThread();
+extern sqOSThread getVMOSThread(void);
 /* Please read the comment for CogThreadManager in the VMMaker package for
  * documentation of this API.  N.B. code is included from sqPlatformSpecific.h
  * before the code here.  e.g.

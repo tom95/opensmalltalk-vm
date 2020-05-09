@@ -95,7 +95,7 @@ endif
 
 $(APP):	cleanbundles $(THIRDPARTYPREREQS) $(VMEXE) $(VMBUNDLES) $(VMPLUGINDYLIBS) \
 		$(VMPLIST) $(VMLOCALIZATION) $(VMMENUNIB) $(VMICONS) \
- 		$(SOURCES) $(THIRDPARTYLIBS) $(APPPOST) pathapp signapp touchapp
+ 		$(SOURCES) $(THIRDPARTYLIBS) pathapp $(APPPOST) signapp touchapp
 
 # Bundles with missing prerequisites won't be built. But we need to force the
 # attempt to make them every time in case the prerequisites /have/ been built.
@@ -167,9 +167,19 @@ $(APP)/Contents/Resources/%.icns: $(OSXDIR)/%.icns
 	@mkdir -p $(APP)/Contents/Resources
 	cp -p $< $(APP)/Contents/Resources
 
+# Make sure that the executable contains a loader_path for Frameworks and all
+# its subdirectories. If Frameworks does not exist still add an rpath for it.
 pathapp:
-	-test -d $(APP)/Contents/Frameworks && \
 	install_name_tool -add_rpath @executable_path/../Frameworks $(VMEXE)
+	if [ -d "$(APP)/Contents/Frameworks" ]; then \
+		for d in `cd "$(APP)/Contents" >/dev/null; find Frameworks -type d`; do \
+			echo install_name_tool -add_rpath @loader_path/../$$d $(VMEXE); \
+			install_name_tool -add_rpath @loader_path/../$$d $(VMEXE); \
+		done \
+	else \
+		echo install_name_tool -add_rpath @loader_path/../Frameworks $(VMEXE); \
+		install_name_tool -add_rpath @loader_path/../Frameworks $(VMEXE); \
+	fi
 
 # To sign the app, set SIGNING_IDENTITY in the environment, e.g.
 # export SIGNING_IDENTITY="Developer ID Application: Eliot Miranda"

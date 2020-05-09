@@ -1,6 +1,6 @@
 #############################################################################
 # Generic Makefile for Mac OS VM 
-# Do make getversion to get makwe -n to work
+# Do make getversion to get make -n to work
 #
 # This is designed to be invoked by Makefile in a specific build directory via
 # include ../common/Makefile.app
@@ -44,6 +44,7 @@ OBJDIR:= $(BLDDIR)/vm
 
 PLATDIR:=../../platforms
 CROSSDIR:=$(PLATDIR)/Cross/vm
+TPDIR:=$(PLATDIR)/Cross/third-party
 OSXDIR:=$(PLATDIR)/iOS/vm/OSX
 OSXCOMMONDIR:=$(PLATDIR)/iOS/vm/Common
 OSXCLASSESDIR:=$(PLATDIR)/iOS/vm/Common/Classes
@@ -88,6 +89,10 @@ include plugins.ext
 LIBS:= $(addprefix $(OBJDIR)/, $(addsuffix .lib, $(INTERNAL_PLUGINS)))
 BUNDLES:= $(addprefix $(OBJDIR)/, $(addsuffix .bundle, $(EXTERNAL_PLUGINS)))
 
+ifdef BIT_IDENTICAL_FLOATING_POINT
+LIBS:=$(BLDDIR)/fdlibm/libm.a $(LIBS)
+endif
+
 # VM config flags.
 ifeq ($(CONFIGURATION),debug)
 OFLAGS:= -g -O0 -fno-omit-frame-pointer
@@ -118,8 +123,15 @@ INCLUDES:= $(addprefix -I,. $(SRCDIRS))
 LD:=	 gcc
 
 #############################################################################
+# Ensure version control info is up-to-date, and extract it from the file.
 #
-SVNREV:= $(shell sed -e "s/^static.*GitRawRevisionString.*Rev: \([0-9][0-9]*\).*/\\1/p" -e d $(PLATDIR)/Cross/vm/sqSCCSVersion.h)
+SCCSVER:=$(PLATDIR)/Cross/vm/sqSCCSVersion.h
+
+ifneq ($(shell grep 'GitRawRevisionString.*$$Rev$$.' $(SCCSVER)),)
+$(shell bash -c "cd ../../scripts; ./updateSCCSVersions")
+endif
+
+SVNREV:= $(shell sed -e "s/^static.*GitRawRevisionString.*Rev: \([0-9][0-9]*\).*/\\1/p" -e d $(SCCSVER))
 
 
 #############################################################################
@@ -203,6 +215,7 @@ ignore := $(addsuffix .%, $(basename $(wildcard $(BUILD)/vm/*.ignore)))
 $(OBJDIR)/$(VM): $(OBJDIR) $(VMOBJ) $(LIBS)
 	$(CC) -arch $(TARGET_ARCH) -o $(OBJDIR)/version.o $(CFLAGS) $(INCLUDES) $(DEFS) -c $(OSXCOMMONDIR)/version.c
 	$(CC) -arch $(TARGET_ARCH) -isysroot $(SDK) $(LDFLAGS) $(FRAMEWORKS) \
+			-Wl,-headerpad_max_install_names \
 			-o $(OBJDIR)/$(VM) $(VMOBJ) $(filter-out $(call ignore), $(LIBS))
 
 $(OBJDIR)/validImage: $(OBJDIR)/validImage.o $(OBJDIR)/sqUnixSpurMemory.o $(OBJDIR)/sqHeapMap.o
@@ -291,6 +304,11 @@ $(OBJDIR)/%.dylib: FORCE
 # It would be nice to have this abbreviation but it creates havoc eem 2/2016
 #%.bundle: $(OBJDIR)/%.bundle
 #	make $(MAKEFLAGS) $<
+
+$(BLDDIR)/fdlibm/libm.a:
+	@-mkdir -p $(@D)
+	$(MAKE) CFLAGS="$(OFLAGS) -D_IEEE_LIBM -isysroot $(SDK)" -C $(@D) \
+		TP=../../$(TPDIR) -f ../../$(TPDIR)/fdlibm/Makefile.remote
 
 FORCE:
 

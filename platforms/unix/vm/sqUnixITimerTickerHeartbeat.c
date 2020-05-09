@@ -173,7 +173,7 @@ ioHighResClock(void)
 						: "=a" (value)
 						: 
 						: "rdx");
-#elif defined(__ARM_ARCH_ISA_A64)
+#elif defined(__ARM_ARCH_ISA_A64) || defined(__arm64__) || defined(__aarch64__) || defined(ARM64)
     __asm__ __volatile__ ("MRS  X0, CNTVCT_EL0");
 #elif defined(__arm__) && (defined(__ARM_ARCH_6__) || defined(__ARM_ARCH_7A__))
 	/* tpr - do nothing for now; needs input from eliot to decide further */
@@ -186,10 +186,10 @@ ioHighResClock(void)
   return value;
 }
 
-unsigned volatile long long
+unsigned long long
 ioUTCMicroseconds() { return get64(utcMicrosecondClock); }
 
-unsigned volatile long long
+unsigned long long
 ioLocalMicroseconds() { return get64(localMicrosecondClock); }
 
 sqInt
@@ -198,13 +198,13 @@ ioLocalSecondsOffset() { return vmGMTOffset / MicrosecondsPerSecond; }
 /* This is an expensive interface for use by Smalltalk or vm profiling code that
  * wants the time now rather than as of the last heartbeat.
  */
-unsigned volatile long long
+unsigned long long
 ioUTCMicrosecondsNow() { return currentUTCMicroseconds(); }
 
 unsigned long long
 ioUTCStartMicroseconds() { return utcStartMicroseconds; }
 
-unsigned volatile long long
+unsigned long long
 ioLocalMicrosecondsNow() { return currentUTCMicroseconds() + vmGMTOffset; };
 
 /* ioMSecs answers the millisecondClock as of the last tick. */

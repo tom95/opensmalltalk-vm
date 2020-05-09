@@ -131,6 +131,7 @@ int inModalLoop= 0;
 int sqIgnorePluginErrors	= 0;
 int runInterpreter		= 1;
 
+
 #include "SqDisplay.h"
 #include "SqSound.h"
 
@@ -919,32 +920,38 @@ reportStackState(char *msg, char *date, int printAll, ucontext_t *uap)
 			 * stackPointer & framePointer to the native stack & frame pointers.
 			 */
 # if __APPLE__ && __MACH__ && __i386__
-			void *fp = (void *)(uap ? uap->uc_mcontext->ss.ebp: 0);
-			void *sp = (void *)(uap ? uap->uc_mcontext->ss.esp: 0);
+			void *fp = (void *)(uap ? uap->uc_mcontext->ss.ebp : 0);
+			void *sp = (void *)(uap ? uap->uc_mcontext->ss.esp : 0);
 # elif __linux__ && __i386__
-			void *fp = (void *)(uap ? uap->uc_mcontext.gregs[REG_EBP]: 0);
-			void *sp = (void *)(uap ? uap->uc_mcontext.gregs[REG_ESP]: 0);
+			void *fp = (void *)(uap ? uap->uc_mcontext.gregs[REG_EBP] : 0);
+			void *sp = (void *)(uap ? uap->uc_mcontext.gregs[REG_ESP] : 0);
 #	elif __linux__ && __x86_64__
-			void *fp = (void *)(uap ? uap->uc_mcontext.gregs[REG_RBP]: 0);
-			void *sp = (void *)(uap ? uap->uc_mcontext.gregs[REG_RSP]: 0);
+			void *fp = (void *)(uap ? uap->uc_mcontext.gregs[REG_RBP] : 0);
+			void *sp = (void *)(uap ? uap->uc_mcontext.gregs[REG_RSP] : 0);
 # elif __FreeBSD__ && __i386__
-			void *fp = (void *)(uap ? uap->uc_mcontext.mc_ebp: 0);
-			void *sp = (void *)(uap ? uap->uc_mcontext.mc_esp: 0);
+			void *fp = (void *)(uap ? uap->uc_mcontext.mc_ebp : 0);
+			void *sp = (void *)(uap ? uap->uc_mcontext.mc_esp : 0);
 # elif __FreeBSD__ && __amd64__
-			void *fp = (void *)(uap ? uap->uc_mcontext.mc_rbp: 0);
-			void *sp = (void *)(uap ? uap->uc_mcontext.mc_rsp: 0);
+			void *fp = (void *)(uap ? uap->uc_mcontext.mc_rbp : 0);
+			void *sp = (void *)(uap ? uap->uc_mcontext.mc_rsp : 0);
 # elif __OpenBSD__ && __i386__
-			void *fp = (void *)(uap ? uap->sc_ebp: 0);
-			void *sp = (void *)(uap ? uap->sc_esp: 0);
+			void *fp = (void *)(uap ? uap->sc_ebp : 0);
+			void *sp = (void *)(uap ? uap->sc_esp : 0);
 # elif __OpenBSD__ && __amd64__
-			void *fp = (void *)(uap ? uap->sc_rbp: 0);
-			void *sp = (void *)(uap ? uap->sc_rsp: 0);
+			void *fp = (void *)(uap ? uap->sc_rbp : 0);
+			void *sp = (void *)(uap ? uap->sc_rsp : 0);
 # elif __sun__ && __i386__
-			void *fp = (void *)(uap ? uap->uc_mcontext.gregs[REG_FP]: 0);
-			void *sp = (void *)(uap ? uap->uc_mcontext.gregs[REG_SP]: 0);
+			void *fp = (void *)(uap ? uap->uc_mcontext.gregs[REG_FP] : 0);
+			void *sp = (void *)(uap ? uap->uc_mcontext.gregs[REG_SP] : 0);
+# elif __sun__ && __amd64
+			void *fp = (void *)(uap ? uap->uc_mcontext.gregs[REG_FP] : 0);
+			void *sp = (void *)(uap ? uap->uc_mcontext.gregs[REG_SP] : 0);
+# elif defined(__arm64__) || defined(__aarch64__) || defined(ARM64)
+			void *fp = (void *)(uap ? uap->uc_mcontext.regs[29] : 0);
+			void *sp = (void *)(uap ? uap->uc_mcontext.sp : 0);
 # elif defined(__arm__) || defined(__arm32__) || defined(ARM32)
-			void *fp = (void *)(uap ? uap->uc_mcontext.arm_fp: 0);
-			void *sp = (void *)(uap ? uap->uc_mcontext.arm_sp: 0);
+			void *fp = (void *)(uap ? uap->uc_mcontext.arm_fp : 0);
+			void *sp = (void *)(uap ? uap->uc_mcontext.arm_sp : 0);
 # else
 #	error need to implement extracting pc from a ucontext_t on this system
 # endif
@@ -1018,9 +1025,37 @@ printRegisterState(ucontext_t *uap)
 			regs[REG_R12], regs[REG_R13], regs[REG_R14], regs[REG_R15],
 			regs[REG_RIP]);
 	return (void *)regs[REG_RIP];
-# elif __linux__ && (defined(__arm64__))
- 	printf("@@FIXME@@: derive register state from a ucontext_t on aarch64 \n");
-	return 0;
+# elif __OpenBSD__ && __x86_64__
+	printf(	"\trax 0x%08lx rbx 0x%08lx rcx 0x%08lx rdx 0x%08lx\n"
+			"\trdi 0x%08lx rsi 0x%08lx rbp 0x%08lx rsp 0x%08lx\n"
+			"\tr8  0x%08lx r9  0x%08lx r10 0x%08lx r11 0x%08lx\n"
+			"\tr12 0x%08lx r13 0x%08lx r14 0x%08lx r15 0x%08lx\n"
+			"\trip 0x%08lx\n",
+			uap->sc_rax, uap->sc_rbx, uap->sc_rcx, uap->sc_rdx,
+			uap->sc_rdi, uap->sc_rsi, uap->sc_rbp, uap->sc_rsp,
+			uap->sc_r8, uap->sc_r9, uap->sc_r10, uap->sc_r11,
+			uap->sc_r12, uap->sc_r13, uap->sc_r14, uap->sc_r15,
+			uap->sc_rip);
+	return (void*)uap->sc_rip;
+# elif __linux__ && (defined(__arm64__) || defined(__aarch64__))
+	void **regs = (void **)&uap->uc_mcontext.regs[0];
+	printf(	"\tx0 %p x1 %p x2 %p x3 %p\n"
+			"\tx4 %p x5 %p x6 %p x7 %p\n"
+			"\tx8 %p x9 %p x10 %p x11 %p\n"
+			"\tx12 %p x13 %p x14 %p x15 %p\n"
+			"\tx16 %p x17 %p x18 %p x19 %p\n"
+			"\tx20 %p x21 %p x22 %p x23 %p\n"
+			"\tx24 %p x25 %p x26 %p x27 %p\n"
+			"\tx29 %p  fp %p  lr %p  sp %p\n",
+			regs[0], regs[1], regs[2], regs[3],
+			regs[4], regs[5], regs[6], regs[7],
+			regs[8], regs[9], regs[10], regs[11],
+			regs[12], regs[13], regs[14], regs[15],
+			regs[16], regs[17], regs[18], regs[19],
+			regs[20], regs[21], regs[22], regs[23],
+			regs[24], regs[25], regs[26], regs[27],
+			regs[28], regs[29], regs[30], (void *)(uap->uc_mcontext.sp));
+	return uap->uc_mcontext.pc;
 # elif __linux__ && (defined(__arm__) || defined(__arm32__) || defined(ARM32))
 	struct sigcontext *regs = &uap->uc_mcontext;
 	printf(	"\t r0 0x%08x r1 0x%08x r2 0x%08x r3 0x%08x\n"
@@ -1573,10 +1608,6 @@ static int vm_parseArgument(int argc, char **argv)
   else if (argc > 1 && !strcmp(argv[0], VMOPTION("numextsems"))) { 
     ioSetMaxExtSemTableSize(atoi(argv[1]));
     return 2; }
-  else if (!strcmp(argv[0], VMOPTION("checkpluginwrites"))) { 
-    extern sqInt checkAllocFiller;
-    checkAllocFiller = 1;
-    return 1; }
   else if (!strcmp(argv[0], VMOPTION("noheartbeat"))) { 
     extern sqInt suppressHeartbeatFlag;
     suppressHeartbeatFlag = 1;
@@ -2001,8 +2032,6 @@ void imgInit(void)
 # define mtfsfi(fpscr)
 #endif
 
-extern void initGlobalStructure(void); // this is effectively null if a global register is not being used
-
 int
 main(int argc, char **argv, char **envp)
 {
@@ -2032,8 +2061,6 @@ main(int argc, char **argv, char **envp)
   }
 #endif
 
-	initGlobalStructure();
- 
  /* Allocate arrays to store copies of pointers to command line
      arguments.  Used by getAttributeIntoLength(). */
 
