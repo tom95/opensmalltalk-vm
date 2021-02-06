@@ -200,6 +200,13 @@ tryLoadingLinked(char *libName)
     if(handle != 0)
         printf("%s: loaded plugin `%s'\n", exeName, libName);
 #endif
+	if (!handle) {
+		const char *why = dlerror();
+		if (thePListInterface.SqueakDebug)
+			fprintf(stderr, "tryLoadingLinked(%s):\n  %s\n", libName, why);
+		else if (strstr(why,"undefined symbol"))
+			fprintf(stderr, "tryLoadingLinked: dlopen: %s\n", why);
+	}
     return handle;
 }
 
@@ -282,7 +289,7 @@ ioLoadModuleRaw(char *pluginName)
 			OSErr err = FSFindFolder(kSystemDomain, kFrameworksFolderType, false, &frameworksFolderRef);
 #pragma unused(err)
 			NSURL *myURLRef = (NSURL *) CFBridgingRelease(CFURLCreateFromFSRef(kCFAllocatorDefault, &frameworksFolderRef));
-			RETAINOBJ(myURLRef.path);
+			RETAINVALUE(myURLRef.path);
 			systemFolder = myURLRef.path;
 		}
 
@@ -292,7 +299,7 @@ ioLoadModuleRaw(char *pluginName)
 		if (pluginNameLength > LENGTHOFDOTFRAMEWORK) {
 			strncpy(workingData,pluginName+pluginNameLength-LODF,LODF);
 			workingData[LODF] = 0x00;
-			if (strcmp(workingData,".framework") == 0) {
+			if (!strcmp(workingData,".framework")) {
 				strncpy(workingData,pluginName,pluginNameLength-LODF);
 				workingData[pluginNameLength-LODF] = 0x00;
 				path = [vmDirPath stringByAppendingPathComponent: @(pluginName)];
@@ -300,10 +307,9 @@ ioLoadModuleRaw(char *pluginName)
 					path2 = [path stringByAppendingPathComponent: @(workingData)];
 					if ((handle = tryLoadingInternals(path2)))
 						return handle;
-				} else {
-					if ((handle= tryLoadingVariations(path, workingData)))
-						return handle;
 				}
+				else if ((handle= tryLoadingVariations(path, workingData)))
+					return handle;
 
 #if PharoVM
 				path = [pluginDirPath stringByAppendingPathComponent: @(pluginName)];
@@ -312,10 +318,9 @@ ioLoadModuleRaw(char *pluginName)
 					path2 = [path stringByAppendingPathComponent: @(workingData)];
 					if ((handle = tryLoadingInternals(path2)))
 						return handle;
-				} else {
-					if ((handle= tryLoadingVariations(path, workingData)))
-						return handle;
 				}
+				else if ((handle= tryLoadingVariations(path, workingData)))
+					return handle;
 #endif
 
 				path = [systemFolder stringByAppendingPathComponent: @(pluginName)];
@@ -323,10 +328,9 @@ ioLoadModuleRaw(char *pluginName)
 					path2 = [path stringByAppendingPathComponent: @(workingData)];
 					if ((handle = tryLoadingInternals(path2)))
 						return handle;
-				} else {
-					if ((handle= tryLoadingVariations(path, workingData)))
-						return handle;
 				}
+				else if ((handle= tryLoadingVariations(path, workingData)))
+					return handle;
 			}
 		}
 
@@ -347,7 +351,6 @@ ioLoadModuleRaw(char *pluginName)
 				return handle;
 		}
 	}
-
 	return NULL;
 }
 
@@ -364,26 +367,25 @@ void *
 ioFindExternalFunctionIn(char *lookupName, void *moduleHandle)
 #endif
 {
-  char buf[NAME_MAX+1];
+  void *fn = dlsym(moduleHandle, lookupName);
 
-  snprintf(buf, sizeof(buf), "%s", lookupName); 
-  void *fn = dlsym(moduleHandle, buf);
+  dprintf((stderr, "ioFindExternalFunctionIn(%s, %p)\n",lookupName, moduleHandle));
 
-  dprintf((stderr, "ioFindExternalFunctionIn(%s, %ld)\n",lookupName, (long) moduleHandle));
-
-  if ((fn == NULL) && (thePListInterface.SqueakDebug)
-      && strcmp(lookupName, "initialiseModule")
-      && strcmp(lookupName, "shutdownModule")
-      && strcmp(lookupName, "setInterpreter")
-      && strcmp(lookupName, "getModuleName")) {
-	char *why = dlerror();
-    fprintf(stderr, "ioFindExternalFunctionIn(%s, %p):\n  %s\n",lookupName, moduleHandle, why);
-	}
+  if (!fn
+	&& thePListInterface.SqueakDebug
+	&& strcmp(lookupName, "initialiseModule")
+	&& strcmp(lookupName, "shutdownModule")
+	&& strcmp(lookupName, "setInterpreter")
+	&& strcmp(lookupName, "getModuleName"))
+    fprintf(stderr, "ioFindExternalFunctionIn(%s, %p):\n  %s\n",
+			lookupName, moduleHandle, dlerror());
 
 #if SPURVM
   if (fn && accessorDepthPtr) {
+	char buf[NAME_MAX+1];
 	signed char *accessorDepthVarPtr;
-	snprintf(buf+strlen(buf), sizeof(buf), "AccessorDepth");
+
+	snprintf(buf, sizeof(buf), "%sAccessorDepth", lookupName); 
 	accessorDepthVarPtr = dlsym(moduleHandle, buf);
 	/* The Slang machinery assumes accessor depth defaults to -1, which
 	 * means "no accessor depth".  It saves space not outputting -1 depths.
@@ -408,6 +410,6 @@ sqInt ioFreeModule(void *moduleHandle)
 	  char* why = dlerror();
       dprintf((stderr, "ioFreeModule(%ld): %s\n", (long) moduleHandle, why));
       return 0;
-    }
+  }
   return 1;
 }

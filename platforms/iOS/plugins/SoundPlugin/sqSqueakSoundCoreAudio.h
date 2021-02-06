@@ -52,7 +52,7 @@ static const int kNumberOfBuffers=4;
 	AudioStreamBasicDescription *inputFormat;
 	AudioQueueBufferRef *inputBuffers;
 	AudioQueueRef	outputAudioQueue;
-	Queue*			soundInQueue;
+	Queue			*soundInQueue;
 	sqInt			semaIndexForOutput;
 	UInt32			bufferSizeForOutput;
 	BOOL			outputIsRunning;
@@ -62,6 +62,7 @@ static const int kNumberOfBuffers=4;
 	int					 numDevices;
 	unsigned int		*deviceIDs; // a.k.a. AudioDeviceID *
 	char			   **deviceNames;
+	char			   **deviceUIDs;
 	char				*deviceTypes; // per device flags, has input, has output
 }
 - (sqInt)	soundInit;
@@ -91,6 +92,10 @@ static const int kNumberOfBuffers=4;
 - (char *)	getDefaultSoundRecorder;
 - (char *)	getSoundPlayerDeviceName: (sqInt) i;
 - (char *)	getSoundRecorderDeviceName: (sqInt) i;
+#if TerfVM
+- (char *)	getSoundPlayerDeviceUID: (sqInt) i;
+- (char *)	getSoundRecorderDeviceUID: (sqInt) i;
+#endif
 - (void)	setDefaultSoundPlayer: (char *) deviceName;
 - (void)	setDefaultSoundRecorder: (char *) deviceName;
 
